@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "io.github.instantafrik_rgb.twa",
+        "sha256_cert_fingerprints": ["46:BC:DC:2D:CA:94:D9:5B:84:A3:C1:4F:66:E1:08:B9:A0:3B:31:0B:0E:F0:08:B2:DC:1C:00:BA:C1:EB:66:90"]
+      }
+    }]
