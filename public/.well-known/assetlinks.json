@@ -2,7 +2,7 @@
       "relation": ["delegate_permission/common.handle_all_urls"],
       "target": {
         "namespace": "android_app",
-        "package_name": "com.instantafrik.stockfacturepro",
-        "sha256_cert_fingerprints": ["56:5B:38:77:17:7B:04:C7:C9:94:54:BC:78:47:5D:5C:93:36:2B:D3:3D:47:A0:AD:D3:8E:AE:BE:17:E9:D5:AC"]
+        "package_name": "io.github.instantafrik_rgb.sfpro",
+        "sha256_cert_fingerprints": ["3F:85:F2:41:C7:30:EF:06:28:EC:02:73:33:4F:1E:97:87:F5:1D:47:85:46:83:51:7B:DF:A8:EC:50:2D:EE:97"]
       }
     }]
