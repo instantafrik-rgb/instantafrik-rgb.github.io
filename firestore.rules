@@ -14,11 +14,6 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Vérifie qu'un champ existe et est d'un type donné
-    function hasType(field, type) {
-      return field is type;
-    }
-
     // Vérifie que le document n'existe pas déjà (création uniquement)
     function isCreate() {
       return !exists(/databases/$(database)/documents/$(request.path));
@@ -57,6 +52,17 @@ service cloud.firestore {
     }
 
     // ============================================================
+    // COLLECTION RACINE : licensed_users/{email}
+    // ============================================================
+    match /licensed_users/{email} {
+      allow read: if isAuthenticated()
+        && request.auth.token.email != null
+        && request.auth.token.email == email;
+
+      allow write: if false;
+    }
+
+    // ============================================================
     // COLLECTION RACINE : users/{userId}
     // ============================================================
 
@@ -74,12 +80,10 @@ service cloud.firestore {
           && request.resource.data.updatedAt is string;
 
         allow update: if isOwner(userId)
-          // Interdit la modification de createdAt si présent
           && (
             !('createdAt' in resource.data)
             || request.resource.data.createdAt == resource.data.createdAt
           )
-          // nextInvoiceNumber / nextQuoteNumber ne peuvent QUE augmenter (jamais reculer)
           && (
             !('nextInvoiceNumber' in resource.data)
             || !('nextInvoiceNumber' in request.resource.data)
@@ -113,7 +117,6 @@ service cloud.firestore {
         allow update: if isOwner(userId)
           && immutableFieldsUnchanged()
           && (
-            // Mise à jour normale OU soft delete
             (
               request.resource.data.name is string
               && isNonNegativeNumber(request.resource.data.purchasePrice)
@@ -161,7 +164,6 @@ service cloud.firestore {
           && isNumber(request.resource.data.newStock)
           && request.resource.data.createdAt is string;
 
-        // Aucune modification autorisée sur les mouvements de stock
         allow update: if false;
         allow delete: if noHardDelete();
       }
@@ -199,27 +201,22 @@ service cloud.firestore {
           && request.resource.data.clientName is string
           && request.resource.data.createdAt is string
           && request.resource.data.updatedAt is string
-          // Cohérence des montants
           && isNonNegativeNumber(request.resource.data.subtotal)
           && isNonNegativeNumber(request.resource.data.discountTotal)
           && isNonNegativeNumber(request.resource.data.vatAmount)
           && isNonNegativeNumber(request.resource.data.total)
           && isNonNegativeNumber(request.resource.data.amountPaid)
           && isNumber(request.resource.data.remainingAmount)
-          // Vérification mathématique : total = subtotal - discountTotal + vatAmount
           && request.resource.data.total
              == request.resource.data.subtotal
                 - request.resource.data.discountTotal
                 + request.resource.data.vatAmount
-          // Statut valide
           && request.resource.data.status in ['draft', 'unpaid', 'partial', 'paid', 'cancelled'];
 
         allow update: if isOwner(userId)
           && immutableFieldsUnchanged()
           && (
-            // Soft delete
             isSoftDelete()
-            // OU mise à jour contrôlée (paiement, annulation, édition brouillon)
             || (
               request.resource.data.number == resource.data.number
               && request.resource.data.total == resource.data.total
@@ -267,11 +264,10 @@ service cloud.firestore {
           && request.resource.data.id is string
           && request.resource.data.invoiceId is string
           && request.resource.data.invoiceNumber is string
-          && isNumber(request.resource.data.amount)   // ← négatif autorisé (remboursement)
+          && isNumber(request.resource.data.amount)
           && request.resource.data.date is string
           && request.resource.data.createdAt is string;
 
-        // Un paiement est immuable : on ne modifie jamais un encaissement
         allow update: if false;
         allow delete: if noHardDelete();
       }

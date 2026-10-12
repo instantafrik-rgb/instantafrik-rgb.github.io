@@ -6,8 +6,10 @@ import React from 'react';
 import { AppProvider, useApp } from './store/AppContext';
 import { AuthProvider, useAuth } from './store/AuthContext';
 import { ToastProvider } from './store/ToastContext';
+import { LicenseProvider, useLicense, hasAppAccess } from './store/LicenseContext';
 import { CloudMigrationBanner } from './components/common/CloudMigrationBanner';
 import { PWAUpdateToast } from './components/common/PWAUpdateToast';
+import { DemoBanner } from './components/common/DemoBanner';
 import { AppShell } from './components/layout/AppShell';
 import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -21,6 +23,7 @@ import { QuotesPage } from './pages/QuotesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ManualInvoicePage } from './pages/ManualInvoicePage';
+import { LicenseBlockedPage } from './pages/LicenseBlockedPage';
 import { notificationService } from './services/notificationService';
 import { isUserOnboarded } from './utils/onboardingUtils';
 import { BrandLogo } from './components/common/BrandLogo';
@@ -29,6 +32,7 @@ import { OnboardingFlow } from './components/onboarding/OnboardingFlow';
 const MainView: React.FC = () => {
   const { activeView, isLoading, state, completeOnboarding, navigate } = useApp();
   const { isLoadingAuth, user } = useAuth();
+  const { license, isLoading: isLoadingLicense } = useLicense();
 
   // Initialize background notification scheduler with state access and reports navigation
   React.useEffect(() => {
@@ -53,6 +57,23 @@ const MainView: React.FC = () => {
     return <LandingPage />;
   }
 
+  // [LICENCE] Vérification du statut de licence (admin / licencié / essai)
+  if (isLoadingLicense) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAFAF8] dark:bg-slate-950 text-[#14213D] dark:text-white space-y-4">
+        <BrandLogo size="lg" className="animate-pulse" />
+        <p className="text-sm font-bold text-[#64748B] dark:text-slate-400">
+          Vérification de votre licence...
+        </p>
+      </div>
+    );
+  }
+
+  // Si la licence n'est pas valide → écran de blocage
+  if (!hasAppAccess(license.status)) {
+    return <LicenseBlockedPage />;
+  }
+
   // Onboarding en 3 étapes pour les nouveaux comptes
   const hasCompletedOnboarding = isUserOnboarded(user?.uid, state);
 
@@ -68,6 +89,7 @@ const MainView: React.FC = () => {
 
   return (
     <AppShell>
+      <DemoBanner />
       <CloudMigrationBanner />
       <PWAUpdateToast />
       {activeView === 'dashboard' && <DashboardPage />}
@@ -90,7 +112,9 @@ export default function App() {
     <AppProvider>
       <AuthProvider>
         <ToastProvider>
-          <MainView />
+          <LicenseProvider>
+            <MainView />
+          </LicenseProvider>
         </ToastProvider>
       </AuthProvider>
     </AppProvider>
