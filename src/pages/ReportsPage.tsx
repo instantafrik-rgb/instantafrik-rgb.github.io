@@ -573,18 +573,18 @@ export const ReportsPage: React.FC = () => {
         
         {/* Payment Methods Breakdown */}
         <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-indigo-600" />
-              <h3 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <CreditCard className="w-4 h-4 text-indigo-600 shrink-0" />
+              <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-wider leading-tight">
                 Encaissements par Mode de Paiement
               </h3>
             </div>
-            <div className="text-right">
-              <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono block">
+            <div className="text-right shrink-0">
+              <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono block whitespace-nowrap">
                 {curr(totalPaymentsAmount)}
               </span>
-              <span className="text-[10px] font-bold text-slate-400">
+              <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap">
                 {filteredPayments.length} paiement(s)
               </span>
             </div>
@@ -635,41 +635,43 @@ export const ReportsPage: React.FC = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60">
-              <div className="text-[10px] text-slate-400 uppercase font-bold">Valeur d'achat (Coût)</div>
-              <div className="text-lg font-black font-mono text-slate-900 dark:text-white mt-0.5">
+          <div className="grid grid-cols-2 gap-3 text-xs items-stretch">
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex flex-col">
+              <div className="text-[10px] text-slate-400 uppercase font-bold leading-tight min-h-[1.75rem]">
+                Valeur d'achat
+              </div>
+              <div className="text-lg font-black font-mono text-slate-900 dark:text-white mt-1">
                 {curr(stockValuation.purchaseValue)}
               </div>
-              <div className="text-[10px] text-slate-500 mt-1">Capital immobilisé</div>
+              <div className="text-[10px] text-slate-500 mt-auto pt-1">Capital immobilisé</div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60">
-              <div className="text-[10px] text-slate-400 uppercase font-bold">Valeur marchande (Vente)</div>
-              <div className="text-lg font-black font-mono text-slate-900 dark:text-white mt-0.5">
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex flex-col">
+              <div className="text-[10px] text-slate-400 uppercase font-bold leading-tight min-h-[1.75rem]">
+                Valeur marchande
+              </div>
+              <div className="text-lg font-black font-mono text-slate-900 dark:text-white mt-1">
                 {curr(stockValuation.sellingValue)}
               </div>
-              <div className="text-[10px] text-slate-500 mt-1">CA potentiel maximal</div>
+              <div className="text-[10px] text-slate-500 mt-auto pt-1">CA potentiel maximal</div>
             </div>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs flex items-center justify-between">
-            <div>
-              <span className="font-bold text-emerald-900 dark:text-emerald-200 block">
+          <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <span className="font-bold text-emerald-900 dark:text-emerald-200 block leading-tight">
                 Marge bénéficiaire latente en rayon :
               </span>
               <span className="text-[10px] text-emerald-700 dark:text-emerald-400">
                 Sur les {state.products.length} référence(s) du catalogue
               </span>
             </div>
-            <div className="text-base font-black font-mono text-emerald-600 dark:text-emerald-400">
+            <div className="text-base font-black font-mono text-emerald-600 dark:text-emerald-400 shrink-0 whitespace-nowrap">
               +{curr(Math.max(0, stockValuation.sellingValue - stockValuation.purchaseValue))}
             </div>
           </div>
         </div>
-
       </div>
-
       {/* 5. Top Products & Profitability Ranking Table */}
       <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

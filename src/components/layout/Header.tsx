@@ -59,8 +59,7 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, showBack = fals
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-[#FAFAF8]/90 dark:bg-[#0B0F19]/90 backdrop-blur-md border-b border-[#E8EDF2] dark:border-[#22304E] px-4 lg:px-8 py-3.5 flex items-center justify-between transition-colors">
-        <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-30 bg-[#FAFAF8]/90 dark:bg-[#0B0F19]/90 backdrop-blur-md border-b border-[#E8EDF2] dark:border-[#22304E] px-2 sm:px-4 lg:px-8 py-3.5 flex items-center justify-between gap-2 transition-colors overflow-hidden">                <div className="flex items-center gap-2 min-w-0 flex-1">
           {canGoBack && activeView !== 'dashboard' && (
             <button
               type="button"
@@ -181,10 +180,10 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, showBack = fals
             <button
               type="button"
               onClick={() => navigate('sales')}
-              className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-xs sm:text-sm shadow-md shadow-orange-500/20 transition-transform active:scale-95 whitespace-nowrap min-h-[44px]"
+              className="flex items-center justify-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-2xl bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-xs sm:text-sm shadow-md shadow-orange-500/20 transition-transform active:scale-95 whitespace-nowrap min-h-[44px] shrink-0"
             >
-              <Plus className="w-4 h-4" />
-              <span>Vendre</span>
+              <Plus className="w-4 h-4 shrink-0" />
+              <span className="hidden sm:inline">Vendre</span>
             </button>
           )}
         </div>
