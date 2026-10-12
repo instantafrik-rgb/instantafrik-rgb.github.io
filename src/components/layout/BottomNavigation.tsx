@@ -24,7 +24,7 @@ export const BottomNavigation: React.FC = () => {
     (i) => (i.status === 'unpaid' || i.status === 'partial') && i.remainingAmount > 0
   ).length;
 
-  const isMoreActive = ['quotes', 'receivables', 'products', 'clients', 'stock', 'settings', 'manual_invoice'].includes(
+  const isMoreActive = ['quotes', 'receivables', 'products', 'clients', 'stock', 'settings', 'manual_invoice', 'invoices'].includes(
     activeView
   );
 
@@ -39,7 +39,7 @@ export const BottomNavigation: React.FC = () => {
       {showMoreMenu && (
         <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs md:hidden animate-in fade-in duration-200">
           <div className="absolute inset-0" onClick={() => setShowMoreMenu(false)} aria-hidden="true" />
-          
+
           <div
             className="relative z-10 w-full bg-white dark:bg-[#131B2E] rounded-t-3xl border-t border-[#E8EDF2] dark:border-[#22304E] p-5 space-y-4 shadow-2xl animate-in slide-in-from-bottom duration-200 max-h-[85vh] overflow-y-auto pb-[calc(env(safe-area-inset-bottom,0px)+16px)]"
           >
@@ -72,6 +72,22 @@ export const BottomNavigation: React.FC = () => {
                 </div>
               </button>
 
+              {/* Mes ventes (NOUVEAU — déplacé depuis le bottom nav) */}
+              <button
+                onClick={() => handleTabClick('invoices')}
+                className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#FAFAF8] dark:bg-slate-800/80 hover:bg-orange-50 dark:hover:bg-orange-950/40 text-left border border-[#E8EDF2] dark:border-slate-700/60 transition-all active:scale-95"
+              >
+                <div className="p-2.5 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate">Mes ventes</div>
+                  <div className="text-[10px] text-slate-400 truncate">
+                    {state.invoices.length} facture{state.invoices.length > 1 ? 's' : ''}
+                  </div>
+                </div>
+              </button>
+
               {/* Stock */}
               <button
                 onClick={() => handleTabClick('stock')}
@@ -83,20 +99,6 @@ export const BottomNavigation: React.FC = () => {
                 <div className="min-w-0">
                   <div className="text-xs font-bold text-slate-900 dark:text-white truncate">Stock</div>
                   <div className="text-[10px] text-slate-400 truncate">Flux & entrées</div>
-                </div>
-              </button>
-
-              {/* Clients */}
-              <button
-                onClick={() => handleTabClick('clients')}
-                className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#FAFAF8] dark:bg-slate-800/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-left border border-[#E8EDF2] dark:border-slate-700/60 transition-all active:scale-95"
-              >
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
-                  <Users className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-bold text-slate-900 dark:text-white truncate">Clients</div>
-                  <div className="text-[10px] text-slate-400 truncate">{state.clients.length} contact(s)</div>
                 </div>
               </button>
 
@@ -130,7 +132,7 @@ export const BottomNavigation: React.FC = () => {
                 </div>
               </button>
 
-              {/* Rapports & Marges (accessible depuis le menu Plus) */}
+              {/* Rapports & Marges */}
               <button
                 onClick={() => handleTabClick('reports')}
                 className="flex items-center gap-3 p-3.5 rounded-2xl bg-[#FAFAF8] dark:bg-slate-800/80 hover:bg-orange-50 dark:hover:bg-orange-950/40 text-left border border-[#E8EDF2] dark:border-slate-700/60 transition-all active:scale-95"
@@ -171,7 +173,7 @@ export const BottomNavigation: React.FC = () => {
         }}
       >
         <div className="grid grid-cols-5 items-center h-[var(--bottom-nav-height)] px-1 relative">
-          
+
           {/* 1. Accueil */}
           <button
             onClick={() => handleTabClick('dashboard')}
@@ -185,17 +187,17 @@ export const BottomNavigation: React.FC = () => {
             <span className="text-[10px] font-bold tracking-tight mt-1">Accueil</span>
           </button>
 
-          {/* 2. Mes ventes */}
+          {/* 2. Clients (remplace Mes ventes) */}
           <button
-            onClick={() => handleTabClick('invoices')}
+            onClick={() => handleTabClick('clients')}
             className={`flex flex-col items-center justify-center h-full min-h-[44px] transition-all ${
-              activeView === 'invoices'
+              activeView === 'clients'
                 ? 'text-[#F97316] font-black'
                 : 'text-[#94A3B8] dark:text-slate-400 hover:text-[#14213D]'
             }`}
           >
-            <FileText className={`w-5 h-5 transition-transform ${activeView === 'invoices' ? 'scale-110 text-[#F97316]' : ''}`} />
-            <span className="text-[10px] font-bold tracking-tight mt-1">Ventes</span>
+            <Users className={`w-5 h-5 transition-transform ${activeView === 'clients' ? 'scale-110 text-[#F97316]' : ''}`} />
+            <span className="text-[10px] font-bold tracking-tight mt-1">Clients</span>
           </button>
 
           {/* 3. ACTION PRINCIPALE CENTRALE SURÉLEVÉE (Vendre) */}
