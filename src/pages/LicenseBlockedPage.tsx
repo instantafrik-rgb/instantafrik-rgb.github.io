@@ -108,7 +108,7 @@ export const LicenseBlockedPage: React.FC = () => {
               </a>
 
               <a
-                href="https://wa.me/22890000000?text=Bonjour%2C%20je%20souhaite%20acheter%20une%20licence%20StockFacture%20Pro"
+                href="https://wa.me/22892304307?text=Bonjour%2C%20je%20souhaite%20acheter%20une%20licence%20StockFacture%20Pro"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="group flex items-center gap-3 p-4 rounded-2xl bg-white dark:bg-slate-800/60 border-2 border-[#E8EDF2] dark:border-slate-700/60 hover:border-emerald-400 dark:hover:border-emerald-700 hover:shadow-md transition-all"

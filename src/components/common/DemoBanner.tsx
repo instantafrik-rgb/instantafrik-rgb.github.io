@@ -97,7 +97,7 @@ export const DemoBanner: React.FC = () => {
             </p>
 
             <a
-              href="https://wa.me/22890000000?text=Bonjour%2C%20je%20souhaite%20acheter%20une%20licence%20StockFacture%20Pro"
+              href="https://wa.me/22892304307?text=Bonjour%2C%20je%20souhaite%20acheter%20une%20licence%20StockFacture%20Pro"
               target="_blank"
               rel="noopener noreferrer"
               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold shadow-xs transition-all hover:shadow-md ${
