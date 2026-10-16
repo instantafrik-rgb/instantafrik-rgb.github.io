@@ -36,7 +36,7 @@ jobs:
 
       - name: Vérifier que assetlinks.json est bien dans le build
         run: |
-          ls -la dist/.well-known/
+          ls -la dist/.well-known/ || echo "⚠️ .well-known non trouvé dans dist/"
           test -f dist/.well-known/assetlinks.json && echo "✅ assetlinks.json trouvé" || exit 1
 
       - name: Configurer GitHub Pages
@@ -45,15 +45,6 @@ jobs:
       - name: Créer un tarball incluant les fichiers cachés
         run: |
           cd dist
-          tar \
-            --dereference --hard-dereference \
-            --directory . \
-            -cvf "$RUNNER_TEMP/artifact.tar" \
-            --exclude=.git \
-            --exclude=.github \
-            --exclude=".[^/]*" \
-            . || true
-          # On refait le tar sans l'exclusion des fichiers cachés
           tar \
             --dereference --hard-dereference \
             --directory . \
