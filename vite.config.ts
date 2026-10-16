@@ -6,7 +6,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig(({ command }) => {
   const isBuild = command === 'build';
-  const base = isBuild ? '/stockfacture-pro/' : '/';
+  const base = '/';
 
   return {
     base,
