@@ -18,6 +18,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithRedirect,
+  signInWithCredential,   // ✅ NOUVEAU : pour Electron
   signOut,
   onAuthStateChanged,
   User,
@@ -48,6 +49,8 @@ googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 /**
  * Sign in with Google (tries popup first, falls back to redirect if popup is blocked)
+ * 
+ * ⚠️ À utiliser UNIQUEMENT sur le web (pas dans Electron).
  */
 export async function signInWithGoogle(): Promise<User> {
   try {
@@ -61,6 +64,48 @@ export async function signInWithGoogle(): Promise<User> {
     }
     throw err;
   }
+}
+
+/**
+ * ✅ NOUVEAU : Sign in with Google via Electron (deep link).
+ * 
+ * Google bloque les popups dans Electron, donc on passe par le navigateur système :
+ * 1. Electron ouvre `auth-callback.html` dans le navigateur par défaut.
+ * 2. L'utilisateur se connecte avec Google.
+ * 3. La page redirige vers `stockfacture://auth/callback?idToken=...`.
+ * 4. Windows rouvre Electron avec le deep link.
+ * 5. Electron envoie le jeton au renderer.
+ * 6. Cette fonction utilise `signInWithCredential` pour connecter l'utilisateur.
+ * 
+ * ⚠️ À utiliser UNIQUEMENT dans Electron.
+ */
+export async function signInWithGoogleElectron(): Promise<User> {
+  const electronAPI = (window as any).electronAPI;
+
+  if (!electronAPI || !electronAPI.isElectron) {
+    throw new Error('Cette fonction doit être appelée dans Electron.');
+  }
+
+  // Demande à Electron d'ouvrir le navigateur système
+  await electronAPI.openAuthBrowser();
+
+  // Écoute le jeton renvoyé par le deep link
+  return new Promise<User>((resolve, reject) => {
+    electronAPI.onAuthToken(async (idToken: string) => {
+      try {
+        if (!idToken) {
+          reject(new Error('Jeton manquant dans le deep link.'));
+          return;
+        }
+
+        const credential = GoogleAuthProvider.credential(idToken);
+        const result = await signInWithCredential(auth, credential);
+        resolve(result.user);
+      } catch (e: any) {
+        reject(new Error(e?.message || 'Erreur de connexion via Electron.'));
+      }
+    });
+  });
 }
 
 /**
