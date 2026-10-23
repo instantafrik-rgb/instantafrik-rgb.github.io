@@ -2,7 +2,7 @@
       "relation": ["delegate_permission/common.handle_all_urls"],
       "target": {
         "namespace": "android_app",
-        "package_name": "io.github.instantafrik_rgb.sfpro",
-        "sha256_cert_fingerprints": ["3F:85:F2:41:C7:30:EF:06:28:EC:02:73:33:4F:1E:97:87:F5:1D:47:85:46:83:51:7B:DF:A8:EC:50:2D:EE:97"]
+        "package_name": "io.github.instantafrik_rgb.v2",
+        "sha256_cert_fingerprints": ["AD:C3:CD:91:CF:A3:9D:36:6B:9B:12:ED:2B:93:28:B6:E1:E4:6F:A5:FA:19:12:DC:28:98:59:52:5C:DE:9B:D9"]
       }
     }]
