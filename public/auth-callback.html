@@ -6,22 +6,24 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #FAFAF8; color: #14213D; }
-    .box { text-align: center; padding: 2rem; }
-    .spinner { width: 40px; height: 40px; border: 4px solid #E8EDF2; border-top-color: #F97316; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    .box { text-align: center; padding: 2rem; max-width: 380px; }
+    #status { font-size: 14px; color: #64748B; line-height: 1.5; }
+    .btn { display: inline-block; margin-top: 1rem; padding: 12px 24px; border: 0; border-radius: 12px; background: #F97316; color: #fff; font-weight: 700; font-size: 15px; cursor: pointer; text-decoration: none; }
+    .btn:disabled { opacity: .6; cursor: default; }
   </style>
 </head>
 <body>
   <div class="box">
-    <div class="spinner"></div>
-    <p id="status">Connexion en cours...</p>
+    <h1 style="font-size:20px;margin:0 0 8px">StockFacture Pro</h1>
+    <p id="status">Cliquez sur le bouton pour vous connecter avec Google.</p>
+    <button id="loginBtn" class="btn">Continuer avec Google</button>
+    <a id="openLink" class="btn" hidden>Ouvrir StockFacture Pro</a>
   </div>
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
     import { getAuth, signInWithPopup, GoogleAuthProvider } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
 
-    // ⚠️ REMPLACEZ par votre configuration Firebase (depuis firebase-applet-config.json)
     const firebaseConfig = {
       apiKey: "AIzaSyCa9KvRnsv1rf0m7GMD-0Wlvi8mxnvh0Ds",
       authDomain: "stockfacture-pro.firebaseapp.com",
@@ -34,24 +36,34 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
 
-    async function doLogin() {
+    const statusEl = document.getElementById('status');
+    const loginBtn = document.getElementById('loginBtn');
+    const openLink = document.getElementById('openLink');
+
+    // ⚠️ La popup Google doit être déclenchée par un clic : sinon le navigateur la bloque.
+    loginBtn.addEventListener('click', async () => {
+      loginBtn.disabled = true;
+      statusEl.textContent = 'Connexion en cours...';
       try {
         const result = await signInWithPopup(auth, provider);
         const credential = GoogleAuthProvider.credentialFromResult(result);
-        const idToken = credential.idToken;
+        const idToken = credential && credential.idToken;
+        if (!idToken) throw new Error('Jeton Google introuvable.');
 
-        // Redirige vers Electron avec le jeton
-        window.location.href = `stockfacture://auth/callback?idToken=${encodeURIComponent(idToken)}`;
-        document.getElementById('status').textContent = 'Redirection vers l\'application...';
+        const link = 'stockfacture://auth/callback?idToken=' + encodeURIComponent(idToken);
+        openLink.href = link;
+        openLink.hidden = false;
+        loginBtn.hidden = true;
+        statusEl.textContent = 'Connexion réussie. Ouverture de l’application… Si rien ne se passe, cliquez sur « Ouvrir StockFacture Pro ».';
+        window.location.href = link;
       } catch (error) {
-        document.getElementById('status').textContent = 'Erreur : ' + error.message;
+        loginBtn.disabled = false;
+        statusEl.textContent = 'Erreur : ' + error.message;
         console.error(error);
       }
-    }
-
-    // Lance la connexion automatiquement
-    doLogin();
+    });
   </script>
 </body>
 </html>

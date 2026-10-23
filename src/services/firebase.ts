@@ -18,7 +18,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInWithRedirect,
-  signInWithCredential,   // ✅ NOUVEAU : pour Electron
+  signInWithCredential,
   signOut,
   onAuthStateChanged,
   User,
@@ -47,12 +47,21 @@ export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
+/** Vrai si l'app tourne dans la fenêtre Electron (exposé par preload.js). */
+function isElectron(): boolean {
+  return !!(window as any).electronAPI?.isElectron;
+}
+
 /**
- * Sign in with Google (tries popup first, falls back to redirect if popup is blocked)
- * 
- * ⚠️ À utiliser UNIQUEMENT sur le web (pas dans Electron).
+ * Sign in with Google.
+ * - Dans Electron : passe par le navigateur système + deep link (la popup Google n'y fonctionne pas).
+ * - Sur le web / Android : popup, avec repli sur redirect si la popup est bloquée.
  */
 export async function signInWithGoogle(): Promise<User> {
+  if (isElectron()) {
+    return signInWithGoogleElectron();
+  }
+
   try {
     const result = await signInWithPopup(auth, googleProvider);
     return result.user;
@@ -67,18 +76,16 @@ export async function signInWithGoogle(): Promise<User> {
 }
 
 /**
- * ✅ NOUVEAU : Sign in with Google via Electron (deep link).
- * 
- * Google bloque les popups dans Electron, donc on passe par le navigateur système :
- * 1. Electron ouvre `auth-callback.html` dans le navigateur par défaut.
+ * Sign in with Google via Electron (deep link).
+ *
+ * 1. Electron ouvre auth-callback.html dans le navigateur par défaut.
  * 2. L'utilisateur se connecte avec Google.
- * 3. La page redirige vers `stockfacture://auth/callback?idToken=...`.
- * 4. Windows rouvre Electron avec le deep link.
- * 5. Electron envoie le jeton au renderer.
- * 6. Cette fonction utilise `signInWithCredential` pour connecter l'utilisateur.
- * 
- * ⚠️ À utiliser UNIQUEMENT dans Electron.
+ * 3. La page redirige vers stockfacture://auth/callback?idToken=...
+ * 4. Windows renvoie le lien à Electron, qui transmet le jeton au renderer.
+ * 5. On appelle signInWithCredential : onAuthStateChanged fait le reste.
  */
+const ELECTRON_SIGNIN_TIMEOUT_MS = 2 * 60 * 1000;
+
 export async function signInWithGoogleElectron(): Promise<User> {
   const electronAPI = (window as any).electronAPI;
 
@@ -86,24 +93,42 @@ export async function signInWithGoogleElectron(): Promise<User> {
     throw new Error('Cette fonction doit être appelée dans Electron.');
   }
 
-  // Demande à Electron d'ouvrir le navigateur système
-  await electronAPI.openAuthBrowser();
-
-  // Écoute le jeton renvoyé par le deep link
   return new Promise<User>((resolve, reject) => {
-    electronAPI.onAuthToken(async (idToken: string) => {
-      try {
-        if (!idToken) {
-          reject(new Error('Jeton manquant dans le deep link.'));
-          return;
-        }
+    let settled = false;
+    let unsubscribe: (() => void) | undefined;
+    let timeoutId: number | undefined;
 
+    const cleanup = () => {
+      settled = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+
+    timeoutId = window.setTimeout(() => {
+      if (settled) return;
+      cleanup();
+      reject(new Error('Connexion expirée. Veuillez réessayer.'));
+    }, ELECTRON_SIGNIN_TIMEOUT_MS);
+
+    // On écoute AVANT d'ouvrir le navigateur pour ne rien rater
+    unsubscribe = electronAPI.onAuthToken(async (idToken: string) => {
+      if (settled) return;
+      try {
+        if (!idToken) throw new Error('Jeton manquant dans le deep link.');
         const credential = GoogleAuthProvider.credential(idToken);
         const result = await signInWithCredential(auth, credential);
+        cleanup();
         resolve(result.user);
       } catch (e: any) {
+        cleanup();
         reject(new Error(e?.message || 'Erreur de connexion via Electron.'));
       }
+    });
+
+    Promise.resolve(electronAPI.openAuthBrowser()).catch((e: any) => {
+      if (settled) return;
+      cleanup();
+      reject(new Error(e?.message || "Impossible d'ouvrir le navigateur."));
     });
   });
 }
