@@ -54,8 +54,11 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, showBack = fals
         return 'StockFacture Pro';
     }
   };
-
+  
+  // ✅ On n'affiche le bouton retour QUE si un élément spécifique est sélectionné (ex: une facture)
+// On le cache pour les pages principales gérées par les Tab.
   const canGoBack = showBack || Boolean(selectedItemId) || activeView !== 'dashboard';
+  
 
   return (
     <>

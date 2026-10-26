@@ -1,10 +1,3 @@
-/**
- * StockFacture Pro - Brand Logo
- * 
- * Composant réutilisable pour afficher le logo de la marque.
- * Utilise l'image /icon.svg générée par le script de build.
- */
-
 import React from 'react';
 
 interface BrandLogoProps {
@@ -20,9 +13,12 @@ const sizeMap = {
 };
 
 export const BrandLogo: React.FC<BrandLogoProps> = ({ size = 'md', className = '' }) => {
+  // ✅ Utilise BASE_URL de Vite qui s'adapte automatiquement au sous-dossier (GitHub Pages) et à l'APK
+  const baseUrl = import.meta.env.BASE_URL || '/';
+  
   return (
     <img
-      src="./icon.svg"
+      src={`${baseUrl}icon.svg`}
       alt="StockFacture Pro"
       className={`${sizeMap[size]} object-contain ${className}`}
       loading="eager"
