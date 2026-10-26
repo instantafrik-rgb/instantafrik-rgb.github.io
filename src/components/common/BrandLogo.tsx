@@ -5,23 +5,31 @@ interface BrandLogoProps {
   className?: string;
 }
 
+// On définit les tailles exactes en pixels
 const sizeMap = {
-  sm: 'w-8 h-8',
-  md: 'w-10 h-10',
-  lg: 'w-12 h-12',
-  xl: 'w-16 h-16',
+  sm: 32,
+  md: 40,
+  lg: 48,
+  xl: 64,
 };
 
 export const BrandLogo: React.FC<BrandLogoProps> = ({ size = 'md', className = '' }) => {
   const baseUrl = import.meta.env.BASE_URL || '/';
-  
+  const pixelSize = sizeMap[size];
+
   return (
     <img
       src={`${baseUrl}icon.svg`}
       alt="StockFacture Pro"
-      // ✅ Ajout de style inline pour forcer les dimensions et éviter les conflits de flexbox
-      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-      className={`${sizeMap[size]} ${className}`}
+      // ✅ On force la taille exacte en pixels, ce qui empêche l'image de devenir géante
+      width={pixelSize}
+      height={pixelSize}
+      style={{ 
+        width: `${pixelSize}px`, 
+        height: `${pixelSize}px`, 
+        objectFit: 'contain' 
+      }}
+      className={className}
       loading="eager"
     />
   );

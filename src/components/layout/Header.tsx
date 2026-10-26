@@ -63,16 +63,6 @@ export const Header: React.FC<HeaderProps> = ({ title, subtitle, showBack = fals
   return (
     <>
       <header className="sticky top-0 z-30 bg-[#FAFAF8]/90 dark:bg-[#0B0F19]/90 backdrop-blur-md border-b border-[#E8EDF2] dark:border-[#22304E] px-2 sm:px-4 lg:px-8 py-3.5 flex items-center justify-between gap-2 transition-colors overflow-hidden">                <div className="flex items-center gap-2 min-w-0 flex-1">
-          {canGoBack && activeView !== 'dashboard' && (
-            <button
-              type="button"
-              onClick={goBack}
-              className="p-2 -ml-1 rounded-2xl text-[#64748B] hover:text-[#14213D] dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center min-w-[44px] min-h-[44px]"
-              aria-label="Retour"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-          )}
           <div>
             <h2 className="text-base sm:text-lg font-black text-[#14213D] dark:text-white leading-tight truncate">
               {getPageTitle()}
