@@ -4,8 +4,7 @@ import path from 'path';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-export default defineConfig(({ command }) => {
-  const isBuild = command === 'build';
+export default defineConfig(() => {
   const base = '/';
 
   return {
@@ -98,16 +97,15 @@ export default defineConfig(({ command }) => {
           cleanupOutdatedCaches: true,
           clientsClaim: true,
           skipWaiting: true,
-          navigateFallback: isBuild ? '/stockfacture-pro/index.html' : '/index.html',
+
+          // ✅ CORRIGÉ : le site est servi à la racine, la page de repli doit être /index.html
+          navigateFallback: '/index.html',
           navigateFallbackDenylist: [/^\/__/, /\/[^/?]+\.[^/]+$/],
+
           runtimeCaching: [
             {
-              // Do NOT intercept or cache Firebase/Google APIs
-              urlPattern: /^https:\/\/(.*\.googleapis\.com|.*\.firebaseio\.com|.*\.firebaseapp\.com|accounts\.google\.com)/i,
-              handler: 'NetworkOnly',
-            },
-            {
-              // Cache Google Fonts for offline UI fidelity
+              // ✅ CORRIGÉ : les polices Google AVANT la règle Firebase/Google,
+              // sinon la règle NetworkOnly ci-dessous les intercepte en premier.
               urlPattern: /^https:\/\/fonts\.(?:googleapis|gstatic)\.com\/.*/i,
               handler: 'CacheFirst',
               options: {
@@ -120,6 +118,11 @@ export default defineConfig(({ command }) => {
                   statuses: [0, 200],
                 },
               },
+            },
+            {
+              // Ne PAS intercepter ni mettre en cache les API Firebase/Google
+              urlPattern: /^https:\/\/(.*\.googleapis\.com|.*\.firebaseio\.com|.*\.firebaseapp\.com|accounts\.google\.com)/i,
+              handler: 'NetworkOnly',
             },
           ],
         },
