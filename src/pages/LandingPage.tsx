@@ -96,7 +96,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignInSuccess }) => 
               className="flex items-center gap-2.5 cursor-pointer"
             >
               {/* ✅ Conteneur avec taille fixe pour que le SVG s'affiche bien sur Android */}
-              <div className="w-10 h-10 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 min-w-[40px] flex items-center justify-center shrink-0">
                 <BrandLogo size="md" />
               </div>
               <div className="text-left">
@@ -602,7 +602,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignInSuccess }) => 
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2.5 mb-4">
                 {/* ✅ Conteneur avec taille fixe pour le footer aussi */}
-                <div className="w-10 h-10 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 min-w-[40px] flex items-center justify-center shrink-0">
                   <BrandLogo size="md" />
                 </div>
                 <span className="font-extrabold text-white">StockFacture Pro</span>
