@@ -13,14 +13,15 @@ const sizeMap = {
 };
 
 export const BrandLogo: React.FC<BrandLogoProps> = ({ size = 'md', className = '' }) => {
-  // ✅ Utilise BASE_URL de Vite qui s'adapte automatiquement au sous-dossier (GitHub Pages) et à l'APK
   const baseUrl = import.meta.env.BASE_URL || '/';
   
   return (
     <img
       src={`${baseUrl}icon.svg`}
       alt="StockFacture Pro"
-      className={`${sizeMap[size]} object-contain ${className}`}
+      // ✅ Ajout de style inline pour forcer les dimensions et éviter les conflits de flexbox
+      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+      className={`${sizeMap[size]} ${className}`}
       loading="eager"
     />
   );

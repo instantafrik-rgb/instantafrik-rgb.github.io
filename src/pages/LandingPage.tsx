@@ -21,7 +21,7 @@ import {
   Shield,
   Sparkles,
 } from 'lucide-react';
-import { signInWithGoogle } from '../services/firebase';
+import { signInWithGoogle, signInWithGoogleElectron } from '../services/firebase';
 import { BrandLogo } from '../components/common/BrandLogo';
 
 interface LandingPageProps {
@@ -38,7 +38,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignInSuccess }) => 
     setIsSigningIn(true);
     setError(null);
     try {
-      await signInWithGoogle();
+      // ✅ Détecte si on est dans Electron
+      if ((window as any).electronAPI?.isElectron) {
+        await signInWithGoogleElectron();
+      } else {
+        await signInWithGoogle();
+      }
       onSignInSuccess?.();
     } catch (e: any) {
       console.error('Sign-in error:', e);
@@ -90,7 +95,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignInSuccess }) => 
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               className="flex items-center gap-2.5 cursor-pointer"
             >
-              <BrandLogo size="md" />
+              {/* ✅ Conteneur avec taille fixe pour que le SVG s'affiche bien sur Android */}
+              <div className="w-10 h-10 flex items-center justify-center shrink-0">
+                <BrandLogo size="md" />
+              </div>
               <div className="text-left">
                 <span className="block font-extrabold text-[#14213D] text-base sm:text-lg leading-tight">
                   StockFacture Pro
@@ -593,7 +601,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignInSuccess }) => 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2.5 mb-4">
-                <BrandLogo size="md" />
+                {/* ✅ Conteneur avec taille fixe pour le footer aussi */}
+                <div className="w-10 h-10 flex items-center justify-center shrink-0">
+                  <BrandLogo size="md" />
+                </div>
                 <span className="font-extrabold text-white">StockFacture Pro</span>
               </div>
               <p className="text-xs leading-relaxed mb-2">
