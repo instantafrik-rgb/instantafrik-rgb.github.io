@@ -32,13 +32,12 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 let firestoreInstance: Firestore;
 try {
   firestoreInstance = initializeFirestore(app, {
-    // ✅ On force le type pour utiliser une option non documentée mais efficace
-    useFetchStreams: false,
-    // On garde le cache simple pour le mode hors-ligne
-    localCache: persistentLocalCache(),
-  } as any); // <-- Le "as any" est la clé pour faire taire TypeScript
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  });
 } catch (e) {
-  console.warn('Firestore init error, fallback to default:', e);
+  // If already initialized or persistent cache not supported in environment
   firestoreInstance = getFirestore(app);
 }
 
@@ -78,12 +77,6 @@ export async function signInWithGoogle(): Promise<User> {
 
 /**
  * Sign in with Google via Electron (deep link).
- *
- * 1. Electron ouvre auth-callback.html dans le navigateur par défaut.
- * 2. L'utilisateur se connecte avec Google.
- * 3. La page redirige vers stockfacture://auth/callback?idToken=...
- * 4. Windows renvoie le lien à Electron, qui transmet le jeton au renderer.
- * 5. On appelle signInWithCredential : onAuthStateChanged fait le reste.
  */
 const ELECTRON_SIGNIN_TIMEOUT_MS = 2 * 60 * 1000;
 
@@ -111,7 +104,6 @@ export async function signInWithGoogleElectron(): Promise<User> {
       reject(new Error('Connexion expirée. Veuillez réessayer.'));
     }, ELECTRON_SIGNIN_TIMEOUT_MS);
 
-    // On écoute AVANT d'ouvrir le navigateur pour ne rien rater
     unsubscribe = electronAPI.onAuthToken(async (idToken: string) => {
       if (settled) return;
       try {
