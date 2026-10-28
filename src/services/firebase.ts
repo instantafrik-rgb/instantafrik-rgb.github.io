@@ -1,8 +1,16 @@
 /**
  * StockFacture Pro - Firebase Client Configuration
- * 
+ *
  * Configures Firebase Auth, Firestore with multi-tab offline caching,
  * and Google Authentication.
+ *
+ * [FIX-QUOTA] Sur Electron (Windows), Firestore utilise `memoryLocalCache`
+ * au lieu de `persistentLocalCache`, car le backend localStorage d'Electron
+ * a un quota très bas (~10 Mo) qui déclenche QuotaExceededError et bloque
+ * l'application sur l'écran de vérification de licence.
+ *
+ * Sur le web et Android (navigateur), on conserve `persistentLocalCache`
+ * multi-onglets pour garder le mode hors-ligne complet.
  */
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
@@ -11,6 +19,7 @@ import {
   getFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  memoryLocalCache,
   Firestore,
 } from 'firebase/firestore';
 import {
@@ -28,17 +37,41 @@ import firebaseConfig from '../../firebase-applet-config.json';
 // Initialize Firebase App instance
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Initialize Firestore with robust multi-tab offline persistence
+// [FIX-QUOTA] Détection Electron (exposé par preload.js)
+// Doit être définie AVANT l'initialisation de Firestore.
+function isElectronEnv(): boolean {
+  return typeof window !== 'undefined' && !!(window as any).electronAPI?.isElectron;
+}
+
+// [FIX-QUOTA] Choix du cache selon l'environnement :
+// - Electron (Windows) : memoryLocalCache → plus de QuotaExceededError
+// - Web / Android      : persistentLocalCache multi-onglets → hors-ligne conservé
 let firestoreInstance: Firestore;
 try {
-  firestoreInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager(),
-    }),
-  });
+  if (isElectronEnv()) {
+    // [FIX-QUOTA] Electron : cache mémoire uniquement, aucune écriture localStorage
+    firestoreInstance = initializeFirestore(app, {
+      localCache: memoryLocalCache(),
+    });
+  } else {
+    // [FIX-QUOTA] Web / Android : persistance locale multi-onglets (comportement d'origine)
+    firestoreInstance = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+  }
 } catch (e) {
-  // If already initialized or persistent cache not supported in environment
-  firestoreInstance = getFirestore(app);
+  // [FIX-QUOTA] Fallback : si l'environnement ne supporte pas la config demandée
+  // (ex. double initialisation, IndexedDB indisponible), on tente un cache mémoire
+  // plutôt que getFirestore() qui réutiliserait la config cassée.
+  try {
+    firestoreInstance = initializeFirestore(app, {
+      localCache: memoryLocalCache(),
+    });
+  } catch {
+    firestoreInstance = getFirestore(app);
+  }
 }
 
 export const db = firestoreInstance;
