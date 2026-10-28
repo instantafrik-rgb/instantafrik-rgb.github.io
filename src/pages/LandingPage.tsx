@@ -257,10 +257,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignInSuccess }) => 
                 <div className="relative rounded-[2.5rem] border-[10px] border-[#14213D] bg-[#14213D] shadow-2xl overflow-hidden">
                   <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-5 bg-[#14213D] rounded-b-2xl z-10" />
                   <img
-                    src="./landing/mobile-accueil.png"
-                    alt="Tableau de bord StockFacture Pro"
-                    className="w-full h-auto block"
-                    loading="eager"
+                      src={`${import.meta.env.BASE_URL}landing/mobile-accueil.png`}
+  alt="Tableau de bord StockFacture Pro"
+  className="w-full h-auto block"
+  loading="eager"
                   />
                 </div>
               </div>
@@ -434,11 +434,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignInSuccess }) => 
             <div className="order-2 lg:order-1">
               <div className="rounded-2xl border border-[#E8EDF2] bg-[#FAFAF8] p-3 sm:p-4 shadow-xl">
                 <img
-                  src="./landing/desktop-produits.png"
-                  alt="Gestion des produits StockFacture Pro"
-                  className="w-full h-auto rounded-xl block"
-                  loading="lazy"
-                />
+  src={`${import.meta.env.BASE_URL}landing/desktop-produits.png`}
+  alt="Gestion des produits StockFacture Pro"
+  className="w-full h-auto rounded-xl block"
+  loading="lazy"
+/>
+
               </div>
               <p className="text-center text-sm font-semibold text-[#64748B] mt-4">
                 Gérez votre catalogue et vos marges
@@ -450,11 +451,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onSignInSuccess }) => 
               <div className="w-full max-w-[240px]">
                 <div className="rounded-[2rem] border-[8px] border-[#14213D] bg-[#14213D] shadow-2xl overflow-hidden">
                   <img
-                    src="./landing/mobile-ventes.png"
-                    alt="Ventes et factures StockFacture Pro"
-                    className="w-full h-auto block"
-                    loading="lazy"
-                  />
+  src={`${import.meta.env.BASE_URL}landing/mobile-ventes.png`}
+  alt="Ventes et factures StockFacture Pro"
+  className="w-full h-auto block"
+  loading="lazy"
+/>
                 </div>
                 <p className="text-center text-sm font-semibold text-[#64748B] mt-4">
                   Facturez et suivez vos règlements
