@@ -67,37 +67,22 @@ import {
 
 /**
  * Central utility to recursively sanitize objects before writing to Firestore.
- * Removes all properties whose value is strictly `undefined`, preventing:
- * "FirebaseError: Unsupported field value: undefined"
- * 
- * Preserves:
- * - null, false, 0, "" (empty strings)
- * - valid arrays and nested objects
- * - Date and Firestore Timestamp instances
  */
 export function sanitizeForFirestore<T>(data: T): T {
   if (data === null || data === undefined) {
     return data;
   }
-
-  // Primitive types
   if (typeof data !== 'object') {
     return data;
   }
-
-  // Date objects or Firestore Timestamps
   if (data instanceof Date || (typeof (data as any)?.toDate === 'function')) {
     return data;
   }
-
-  // Arrays: sanitize each element and filter out undefined
   if (Array.isArray(data)) {
     return data
       .filter((item) => item !== undefined)
       .map((item) => sanitizeForFirestore(item)) as unknown as T;
   }
-
-  // Plain objects: omit undefined properties
   const result: Record<string, any> = {};
   for (const [key, value] of Object.entries(data as Record<string, any>)) {
     if (value !== undefined) {
@@ -113,7 +98,6 @@ export function sanitizeForFirestore<T>(data: T): T {
 
 /**
  * Check if a record was created recently (within given window in ms).
- * Used to avoid erasing newly created local records before they reach the cloud.
  */
 function isRecentlyCreated(createdAt?: string, windowMs = 180000): boolean {
   if (!createdAt) return false;
@@ -131,10 +115,11 @@ export class FirestoreSyncService {
   private currentUserId: string | null = null;
   private onRemoteUpdateCallback: ((updater: (prevState: AppState) => AppState) => void) | null = null;
   private statusListeners: Set<(status: SyncStatus) => void> = new Set();
-
-  // Fine-grained error and health tracking per collection
   private collectionErrors: Map<string, { code?: string; message: string; timestamp: string }> = new Map();
   private healthyCollections: Set<string> = new Set();
+  
+  // ✅ NOUVEAU : Mémorise les ID supprimés localement pendant 10 secondes pour éviter les résurrections
+  private recentlyDeletedIds = new Set<string>();
 
   private status: SyncStatus = {
     state: typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'idle',
@@ -169,14 +154,10 @@ export class FirestoreSyncService {
     return () => this.statusListeners.delete(callback);
   }
 
-    private notifyStatus() {
+  private notifyStatus() {
     this.statusListeners.forEach((l) => l(this.status));
   }
 
-  /**
-   * [BONUS] Logging centralisé des erreurs de synchronisation.
-   * Remplace les `catch(() => {})` silencieux par un log clair + mise à jour du statut.
-   */
   private logSyncError(operation: string, error: any, context?: Record<string, any>) {
     const code = error?.code || 'unknown';
     const message = error?.message || String(error);
@@ -185,8 +166,6 @@ export class FirestoreSyncService {
       message,
       ...context,
     });
-
-    // Si c'est une erreur de permission, on remonte le statut global
     if (code === 'permission-denied') {
       this.status = {
         ...this.status,
@@ -196,21 +175,15 @@ export class FirestoreSyncService {
       this.notifyStatus();
     }
   }
-  /**
-   * Register callback to update React AppContext state when remote changes arrive from cloud
-   */
+
   public registerRemoteUpdateListener(callback: (updater: (prevState: AppState) => AppState) => void) {
     this.onRemoteUpdateCallback = callback;
   }
 
-  /**
-   * Start real-time sync for an authenticated user
-   */
   public startSync(userId: string) {
     if (this.currentUserId === userId && this.activeSubscriptions.length > 0) {
       return;
     }
-
     this.stopSync();
     this.currentUserId = userId;
     this.collectionErrors.clear();
@@ -222,7 +195,6 @@ export class FirestoreSyncService {
     };
     this.notifyStatus();
 
-    // Proactively purge any residual demo documents from Firestore for this user in background
     this.purgeAllDemoDataFromCloud(userId).catch((err) => {
       console.warn('[FirestoreSync] Initial demo purge warning:', err);
     });
@@ -240,12 +212,6 @@ export class FirestoreSyncService {
     }
   }
 
-  /**
-   * Permanently purge any residual demo documents from the user's Firestore cloud storage.
-   * Keeps all genuine user products, invoices, clients, quotes, payments, movements, and categories intact.
-   * 
-   * [TÂCHE #1] Uses soft-delete (_deleted: true) to comply with the hardened Firestore rules.
-   */
   public async purgeAllDemoDataFromCloud(userId: string): Promise<number> {
     let deletedCount = 0;
     try {
@@ -276,7 +242,6 @@ export class FirestoreSyncService {
             let bCount = 0;
             const nowIso = new Date().toISOString();
             for (const docId of toDelete) {
-              // [TÂCHE #1] Soft delete instead of hard delete
               batch.update(doc(db, 'users', userId, col.name, docId), {
                 _deleted: true,
                 updatedAt: nowIso,
@@ -303,9 +268,6 @@ export class FirestoreSyncService {
     return deletedCount;
   }
 
-  /**
-   * Stop all active real-time listeners (e.g. on logout)
-   */
   public stopSync() {
     this.activeSubscriptions.forEach((unsub) => {
       try {
@@ -316,6 +278,7 @@ export class FirestoreSyncService {
     this.currentUserId = null;
     this.collectionErrors.clear();
     this.healthyCollections.clear();
+    this.recentlyDeletedIds.clear();
 
     this.status = {
       ...this.status,
@@ -325,13 +288,8 @@ export class FirestoreSyncService {
     this.notifyStatus();
   }
 
-  /**
-   * Check if remote Firestore has existing data or completed onboarding for the user.
-   * Multi-source verification to never lock out existing accounts.
-   */
   public async hasCloudData(userId: string): Promise<boolean> {
     try {
-      // 1. Parallel check of onboarding and company settings (fast single doc lookups)
       const onboardingRef = doc(db, 'users', userId, 'settings', 'onboarding');
       const settingsRef = doc(db, 'users', userId, 'settings', 'company');
 
@@ -350,7 +308,6 @@ export class FirestoreSyncService {
         }
       }
 
-      // 2. Parallel quick check for existence in primary collections
       const collectionsToCheck = ['products', 'clients', 'invoices', 'quotes', 'movements'];
       const checks = collectionsToCheck.map(async (colName) => {
         try {
@@ -371,10 +328,6 @@ export class FirestoreSyncService {
     }
   }
 
-  /**
-   * Persist onboarding completion flag directly to Firestore
-   * Guarantees persistence across devices, refresh, and logout/login.
-   */
   public async persistOnboardingStatus(userId: string): Promise<void> {
     try {
       const nowIso = new Date().toISOString();
@@ -404,18 +357,12 @@ export class FirestoreSyncService {
     }
   }
 
-  /**
-   * Migrate full local state to Firestore on first login
-   * All objects are systematically sanitized to eliminate any `undefined` values.
-   */
   public async migrateLocalToCloud(userId: string, localState: AppState): Promise<boolean> {
     try {
       this.status = { ...this.status, state: 'syncing' };
       this.notifyStatus();
 
-      // 1. Settings
       if (localState.settings) {
-        // Never migrate demo settings into an authenticated user's account
         const settingsToMigrate = isDemoSettings(localState.settings)
           ? cleanCompanySettings(localState.settings)
           : localState.settings;
@@ -427,7 +374,6 @@ export class FirestoreSyncService {
         await setDoc(doc(db, 'users', userId, 'settings', 'company'), sanitizedSettings);
       }
 
-      // 2. Batched upload
       let batch = writeBatch(db);
       let count = 0;
 
@@ -439,7 +385,6 @@ export class FirestoreSyncService {
         }
       };
 
-      // Products
       for (const p of localState.products || []) {
         if (isDemoProduct(p)) continue;
         const ref = doc(db, 'users', userId, 'products', p.id);
@@ -453,7 +398,6 @@ export class FirestoreSyncService {
         await commitAndResetBatchIfNeeded();
       }
 
-      // Clients
       for (const c of localState.clients || []) {
         if (isDemoClient(c)) continue;
         const ref = doc(db, 'users', userId, 'clients', c.id);
@@ -467,7 +411,6 @@ export class FirestoreSyncService {
         await commitAndResetBatchIfNeeded();
       }
 
-      // Invoices
       for (const inv of localState.invoices || []) {
         if (isDemoInvoice(inv)) continue;
         const ref = doc(db, 'users', userId, 'invoices', inv.id);
@@ -481,7 +424,6 @@ export class FirestoreSyncService {
         await commitAndResetBatchIfNeeded();
       }
 
-      // Quotes
       for (const q of localState.quotes || []) {
         if (isDemoQuote(q)) continue;
         const ref = doc(db, 'users', userId, 'quotes', q.id);
@@ -495,7 +437,6 @@ export class FirestoreSyncService {
         await commitAndResetBatchIfNeeded();
       }
 
-      // Payments
       for (const pay of localState.payments || []) {
         if (isDemoPayment(pay)) continue;
         const ref = doc(db, 'users', userId, 'payments', pay.id);
@@ -508,7 +449,6 @@ export class FirestoreSyncService {
         await commitAndResetBatchIfNeeded();
       }
 
-      // Stock Movements
       for (const m of localState.movements || []) {
         if (isDemoMovement(m)) continue;
         const ref = doc(db, 'users', userId, 'movements', m.id);
@@ -521,7 +461,6 @@ export class FirestoreSyncService {
         await commitAndResetBatchIfNeeded();
       }
 
-      // Categories
       for (const cat of localState.categories || []) {
         const ref = doc(db, 'users', userId, 'categories', cat.id);
         batch.set(ref, sanitizeForFirestore(cat));
@@ -529,7 +468,6 @@ export class FirestoreSyncService {
         await commitAndResetBatchIfNeeded();
       }
 
-      // Closures
       if (localState.closures) {
         for (const cl of localState.closures) {
           const ref = doc(db, 'users', userId, 'closures', cl.id);
@@ -539,7 +477,6 @@ export class FirestoreSyncService {
         }
       }
 
-      // Restock Requests (Clients à relancer)
       if (localState.restockRequests) {
         for (const rr of localState.restockRequests) {
           if (isDemoRestockRequest(rr)) continue;
@@ -550,7 +487,6 @@ export class FirestoreSyncService {
         }
       }
 
-      // Sale Returns (Retours, avoirs, échanges)
       if (localState.returns) {
         for (const ret of localState.returns) {
           const ref = doc(db, 'users', userId, 'returns', ret.id);
@@ -583,9 +519,8 @@ export class FirestoreSyncService {
       return false;
     }
   }
-    // --- Real-Time Listeners for Bidirectional Synchronisation ---
+
   private subscribeToCollections(userId: string) {
-    // 0. Dedicated Onboarding listener
     const onboardingRef = doc(db, 'users', userId, 'settings', 'onboarding');
     const unsubOnboarding = onSnapshot(
       onboardingRef,
@@ -608,7 +543,6 @@ export class FirestoreSyncService {
     );
     this.activeSubscriptions.push(unsubOnboarding);
 
-    // 1. Settings listener
     const settingsRef = doc(db, 'users', userId, 'settings', 'company');
     const unsubSettings = onSnapshot(
       settingsRef,
@@ -618,10 +552,8 @@ export class FirestoreSyncService {
             const cloudSettings = snap.data() as CompanySettings;
             markUserOnboardedLocally(userId);
             this.onRemoteUpdateCallback((prev) => {
-              // Guard: If cloud contains demo store settings, never let them contaminate or overwrite real user settings
               if (isDemoSettings(cloudSettings)) {
                 if (hasCustomUserSettings(prev.settings)) {
-                  // User has legitimate local settings, re-sync them to repair cloud document
                   this.syncSettings(prev.settings).catch(() => {});
                   return prev;
                 }
@@ -632,7 +564,6 @@ export class FirestoreSyncService {
                 };
               }
 
-              // Check if local settings were modified more recently than this incoming snapshot
               const localTime = prev.settings?.updatedAt ? new Date(prev.settings.updatedAt).getTime() : 0;
               const cloudTime = cloudSettings.updatedAt ? new Date(cloudSettings.updatedAt).getTime() : 0;
               if (
@@ -641,12 +572,10 @@ export class FirestoreSyncService {
                 !isNaN(localTime) &&
                 !isNaN(cloudTime)
               ) {
-                // Local settings are strictly newer (e.g. pending local change); do not overwrite with older snapshot
                 this.syncSettings(prev.settings).catch(() => {});
                 return prev;
               }
 
-              // Legitimate cloud settings: merge with current settings (cloud is authoritative)
               const mergedSettings: CompanySettings = {
                 ...prev.settings,
                 ...cloudSettings,
@@ -660,8 +589,6 @@ export class FirestoreSyncService {
               };
             });
           } else {
-            // Snapshot does NOT exist in Firestore yet:
-            // If local state already has custom user settings, proactively sync them up to initialize cloud
             this.onRemoteUpdateCallback((prev) => {
               if (hasCustomUserSettings(prev.settings)) {
                 this.syncSettings(prev.settings).catch(() => {});
@@ -676,7 +603,7 @@ export class FirestoreSyncService {
     );
     this.activeSubscriptions.push(unsubSettings);
 
-    // 2. Products listener
+    // --- PRODUCTS LISTENER (CORRIGÉ) ---
     const productsRef = collection(db, 'users', userId, 'products');
     const unsubProducts = onSnapshot(
       productsRef,
@@ -688,7 +615,6 @@ export class FirestoreSyncService {
             if (!data._deleted) {
               const item = { ...data, id: d.id };
               if (isDemoProduct(item)) {
-                // [TÂCHE #1] Soft-delete demo products from cloud
                 setDoc(
                   doc(db, 'users', userId, 'products', d.id),
                   { _deleted: true, updatedAt: new Date().toISOString() },
@@ -714,8 +640,10 @@ export class FirestoreSyncService {
             }
 
             const remoteIds = new Set(remoteProducts.map((p) => p.id));
+            
+            // ✅ NOUVEAU : On filtre les produits qui viennent d'être supprimés localement
             const pendingLocal = cleanPrevProducts.filter(
-              (p) => !remoteIds.has(p.id) && isRecentlyCreated(p.createdAt)
+              (p) => !remoteIds.has(p.id) && isRecentlyCreated(p.createdAt) && !this.recentlyDeletedIds.has(p.id)
             );
 
             if (pendingLocal.length > 0) {
@@ -727,7 +655,7 @@ export class FirestoreSyncService {
 
             return {
               ...prev,
-              products: remoteProducts,
+              products: remoteProducts.filter(p => !this.recentlyDeletedIds.has(p.id)), // ✅ Filtre final
             };
           });
         }
@@ -737,68 +665,7 @@ export class FirestoreSyncService {
     );
     this.activeSubscriptions.push(unsubProducts);
 
-    // 3. Invoices listener
-    const invoicesRef = collection(db, 'users', userId, 'invoices');
-    const unsubInvoices = onSnapshot(
-      invoicesRef,
-      (snap) => {
-        if (this.onRemoteUpdateCallback) {
-          const remoteInvoices: Invoice[] = [];
-          snap.forEach((d) => {
-            const data = d.data() as Invoice & { _deleted?: boolean };
-            if (!data._deleted) {
-              const item = { ...data, id: d.id };
-              if (isDemoInvoice(item)) {
-                // [TÂCHE #1] Soft-delete demo invoices from cloud
-                setDoc(
-                  doc(db, 'users', userId, 'invoices', d.id),
-                  { _deleted: true, updatedAt: new Date().toISOString() },
-                  { merge: true }
-                ).catch(() => {});
-              } else {
-                remoteInvoices.push(item);
-              }
-            }
-          });
-
-          if (remoteInvoices.length > 0) {
-            markUserOnboardedLocally(userId);
-          }
-
-          remoteInvoices.sort((a, b) => (b.createdAt || b.date || '').localeCompare(a.createdAt || a.date || ''));
-
-          this.onRemoteUpdateCallback((prev) => {
-            const cleanPrevInvoices = (prev.invoices || []).filter((i) => !isDemoInvoice(i));
-            if (remoteInvoices.length === 0 && cleanPrevInvoices.length > 0) {
-              this.syncLocalInvoicesIfCloudEmpty(userId, cleanPrevInvoices);
-              return { ...prev, invoices: cleanPrevInvoices };
-            }
-
-            const remoteIds = new Set(remoteInvoices.map((i) => i.id));
-            const pendingLocal = cleanPrevInvoices.filter(
-              (i) => !remoteIds.has(i.id) && isRecentlyCreated(i.createdAt)
-            );
-
-            if (pendingLocal.length > 0) {
-              this.syncLocalInvoicesIfCloudEmpty(userId, pendingLocal);
-              const merged = [...remoteInvoices, ...pendingLocal];
-              merged.sort((a, b) => (b.createdAt || b.date || '').localeCompare(a.createdAt || a.date || ''));
-              return { ...prev, invoices: merged };
-            }
-
-            return {
-              ...prev,
-              invoices: remoteInvoices,
-            };
-          });
-        }
-        this.markCollectionHealthy('invoices');
-      },
-      (err) => this.handleSnapshotError('invoices', err)
-    );
-    this.activeSubscriptions.push(unsubInvoices);
-
-    // 4. Clients listener
+    // --- CLIENTS LISTENER ---
     const clientsRef = collection(db, 'users', userId, 'clients');
     const unsubClients = onSnapshot(
       clientsRef,
@@ -810,7 +677,6 @@ export class FirestoreSyncService {
             if (!data._deleted) {
               const item = { ...data, id: d.id };
               if (isDemoClient(item)) {
-                // [TÂCHE #1] Soft-delete demo clients from cloud
                 setDoc(
                   doc(db, 'users', userId, 'clients', d.id),
                   { _deleted: true, updatedAt: new Date().toISOString() },
@@ -837,7 +703,7 @@ export class FirestoreSyncService {
 
             const remoteIds = new Set(remoteClients.map((c) => c.id));
             const pendingLocal = cleanPrevClients.filter(
-              (c) => !remoteIds.has(c.id) && isRecentlyCreated(c.createdAt)
+              (c) => !remoteIds.has(c.id) && isRecentlyCreated(c.createdAt) && !this.recentlyDeletedIds.has(c.id)
             );
 
             if (pendingLocal.length > 0) {
@@ -849,7 +715,7 @@ export class FirestoreSyncService {
 
             return {
               ...prev,
-              clients: remoteClients,
+              clients: remoteClients.filter(c => !this.recentlyDeletedIds.has(c.id)),
             };
           });
         }
@@ -859,7 +725,67 @@ export class FirestoreSyncService {
     );
     this.activeSubscriptions.push(unsubClients);
 
-    // 5. Quotes listener
+    // --- INVOICES LISTENER ---
+    const invoicesRef = collection(db, 'users', userId, 'invoices');
+    const unsubInvoices = onSnapshot(
+      invoicesRef,
+      (snap) => {
+        if (this.onRemoteUpdateCallback) {
+          const remoteInvoices: Invoice[] = [];
+          snap.forEach((d) => {
+            const data = d.data() as Invoice & { _deleted?: boolean };
+            if (!data._deleted) {
+              const item = { ...data, id: d.id };
+              if (isDemoInvoice(item)) {
+                setDoc(
+                  doc(db, 'users', userId, 'invoices', d.id),
+                  { _deleted: true, updatedAt: new Date().toISOString() },
+                  { merge: true }
+                ).catch(() => {});
+              } else {
+                remoteInvoices.push(item);
+              }
+            }
+          });
+
+          if (remoteInvoices.length > 0) {
+            markUserOnboardedLocally(userId);
+          }
+
+          remoteInvoices.sort((a, b) => (b.createdAt || b.date || '').localeCompare(a.createdAt || a.date || ''));
+
+          this.onRemoteUpdateCallback((prev) => {
+            const cleanPrevInvoices = (prev.invoices || []).filter((i) => !isDemoInvoice(i));
+            if (remoteInvoices.length === 0 && cleanPrevInvoices.length > 0) {
+              this.syncLocalInvoicesIfCloudEmpty(userId, cleanPrevInvoices);
+              return { ...prev, invoices: cleanPrevInvoices };
+            }
+
+            const remoteIds = new Set(remoteInvoices.map((i) => i.id));
+            const pendingLocal = cleanPrevInvoices.filter(
+              (i) => !remoteIds.has(i.id) && isRecentlyCreated(i.createdAt) && !this.recentlyDeletedIds.has(i.id)
+            );
+
+            if (pendingLocal.length > 0) {
+              this.syncLocalInvoicesIfCloudEmpty(userId, pendingLocal);
+              const merged = [...remoteInvoices, ...pendingLocal];
+              merged.sort((a, b) => (b.createdAt || b.date || '').localeCompare(a.createdAt || a.date || ''));
+              return { ...prev, invoices: merged };
+            }
+
+            return {
+              ...prev,
+              invoices: remoteInvoices.filter(i => !this.recentlyDeletedIds.has(i.id)),
+            };
+          });
+        }
+        this.markCollectionHealthy('invoices');
+      },
+      (err) => this.handleSnapshotError('invoices', err)
+    );
+    this.activeSubscriptions.push(unsubInvoices);
+
+    // --- QUOTES LISTENER ---
     const quotesRef = collection(db, 'users', userId, 'quotes');
     const unsubQuotes = onSnapshot(
       quotesRef,
@@ -871,7 +797,6 @@ export class FirestoreSyncService {
             if (!data._deleted) {
               const item = { ...data, id: d.id };
               if (isDemoQuote(item)) {
-                // [TÂCHE #1] Soft-delete demo quotes from cloud
                 setDoc(
                   doc(db, 'users', userId, 'quotes', d.id),
                   { _deleted: true, updatedAt: new Date().toISOString() },
@@ -894,7 +819,7 @@ export class FirestoreSyncService {
 
             const remoteIds = new Set(remoteQuotes.map((q) => q.id));
             const pendingLocal = cleanPrevQuotes.filter(
-              (q) => !remoteIds.has(q.id) && isRecentlyCreated(q.createdAt)
+              (q) => !remoteIds.has(q.id) && isRecentlyCreated(q.createdAt) && !this.recentlyDeletedIds.has(q.id)
             );
 
             if (pendingLocal.length > 0) {
@@ -906,7 +831,7 @@ export class FirestoreSyncService {
 
             return {
               ...prev,
-              quotes: remoteQuotes,
+              quotes: remoteQuotes.filter(q => !this.recentlyDeletedIds.has(q.id)),
             };
           });
         }
@@ -916,7 +841,7 @@ export class FirestoreSyncService {
     );
     this.activeSubscriptions.push(unsubQuotes);
 
-    // 6. Payments listener
+    // --- PAYMENTS LISTENER ---
     const paymentsRef = collection(db, 'users', userId, 'payments');
     const unsubPayments = onSnapshot(
       paymentsRef,
@@ -926,7 +851,6 @@ export class FirestoreSyncService {
           snap.forEach((d) => {
             const item = { ...(d.data() as PaymentRecord), id: d.id };
             if (isDemoPayment(item)) {
-              // [TÂCHE #1] Soft-delete demo payments from cloud
               setDoc(
                 doc(db, 'users', userId, 'payments', d.id),
                 { _deleted: true, updatedAt: new Date().toISOString() },
@@ -948,7 +872,7 @@ export class FirestoreSyncService {
 
             const remoteIds = new Set(remotePayments.map((p) => p.id));
             const pendingLocal = cleanPrevPayments.filter(
-              (p) => !remoteIds.has(p.id) && isRecentlyCreated(p.createdAt)
+              (p) => !remoteIds.has(p.id) && isRecentlyCreated(p.createdAt) && !this.recentlyDeletedIds.has(p.id)
             );
 
             if (pendingLocal.length > 0) {
@@ -960,7 +884,7 @@ export class FirestoreSyncService {
 
             return {
               ...prev,
-              payments: remotePayments,
+              payments: remotePayments.filter(p => !this.recentlyDeletedIds.has(p.id)),
             };
           });
         }
@@ -970,7 +894,7 @@ export class FirestoreSyncService {
     );
     this.activeSubscriptions.push(unsubPayments);
 
-    // 7. Stock Movements listener
+    // --- MOVEMENTS LISTENER ---
     const movementsRef = collection(db, 'users', userId, 'movements');
     const unsubMovements = onSnapshot(
       movementsRef,
@@ -980,7 +904,6 @@ export class FirestoreSyncService {
           snap.forEach((d) => {
             const item = { ...(d.data() as StockMovement), id: d.id };
             if (isDemoMovement(item)) {
-              // [TÂCHE #1] Soft-delete demo movements from cloud
               setDoc(
                 doc(db, 'users', userId, 'movements', d.id),
                 { _deleted: true, updatedAt: new Date().toISOString() },
@@ -1002,7 +925,7 @@ export class FirestoreSyncService {
 
             const remoteIds = new Set(remoteMovements.map((m) => m.id));
             const pendingLocal = cleanPrevMovements.filter(
-              (m) => !remoteIds.has(m.id) && isRecentlyCreated(m.createdAt)
+              (m) => !remoteIds.has(m.id) && isRecentlyCreated(m.createdAt) && !this.recentlyDeletedIds.has(m.id)
             );
 
             if (pendingLocal.length > 0) {
@@ -1014,7 +937,7 @@ export class FirestoreSyncService {
 
             return {
               ...prev,
-              movements: remoteMovements,
+              movements: remoteMovements.filter(m => !this.recentlyDeletedIds.has(m.id)),
             };
           });
         }
@@ -1024,7 +947,7 @@ export class FirestoreSyncService {
     );
     this.activeSubscriptions.push(unsubMovements);
 
-    // 8. Categories listener
+    // --- CATEGORIES LISTENER ---
     const categoriesRef = collection(db, 'users', userId, 'categories');
     const unsubCategories = onSnapshot(
       categoriesRef,
@@ -1053,7 +976,7 @@ export class FirestoreSyncService {
     );
     this.activeSubscriptions.push(unsubCategories);
 
-    // 9. Closures (Clôtures de caisse) listener
+    // --- CLOSURES LISTENER ---
     const closuresRef = collection(db, 'users', userId, 'closures');
     const unsubClosures = onSnapshot(
       closuresRef,
@@ -1077,7 +1000,7 @@ export class FirestoreSyncService {
     );
     this.activeSubscriptions.push(unsubClosures);
 
-    // 10. Restock Requests (Clients à relancer) listener
+    // --- RESTOCK REQUESTS LISTENER ---
     const restockRef = collection(db, 'users', userId, 'restockRequests');
     const unsubRestock = onSnapshot(
       restockRef,
@@ -1087,7 +1010,6 @@ export class FirestoreSyncService {
           snap.forEach((d) => {
             const item = { ...(d.data() as RestockRequest), id: d.id };
             if (isDemoRestockRequest(item)) {
-              // [TÂCHE #1] Soft-delete demo restock requests from cloud
               setDoc(
                 doc(db, 'users', userId, 'restockRequests', d.id),
                 { _deleted: true, updatedAt: new Date().toISOString() },
@@ -1111,7 +1033,7 @@ export class FirestoreSyncService {
     );
     this.activeSubscriptions.push(unsubRestock);
 
-    // 11. Sale Returns (Retours, avoirs, échanges) listener
+    // --- RETURNS LISTENER ---
     const returnsRef = collection(db, 'users', userId, 'returns');
     const unsubReturns = onSnapshot(
       returnsRef,
@@ -1136,7 +1058,6 @@ export class FirestoreSyncService {
     this.activeSubscriptions.push(unsubReturns);
   }
 
-  // --- Auto-upload helpers for unmigrated local collections ---
   private async syncLocalClientsIfCloudEmpty(userId: string, clients: Client[]) {
     const cleanClients = (clients || []).filter((c) => !isDemoClient(c));
     if (cleanClients.length === 0) return;
@@ -1297,7 +1218,8 @@ export class FirestoreSyncService {
       console.warn('[FirestoreSync] Failed to sync local categories:', e);
     }
   }
-    private markCollectionHealthy(collectionName: string) {
+
+  private markCollectionHealthy(collectionName: string) {
     this.collectionErrors.delete(collectionName);
     this.healthyCollections.add(collectionName);
 
@@ -1367,16 +1289,9 @@ export class FirestoreSyncService {
     this.notifyStatus();
   }
 
-  /**
-   * Atomic synchronization of all changes made in AppContext to Firestore.
-   * Every object is systematically sanitized to remove undefined values.
-   * 
-   * [TÂCHE #1] Soft-delete partout : les suppressions physiques sont remplacées par
-   * des mises à jour `_deleted: true` conformes aux règles Firestore durcies.
-   */
   public async syncStateChanges(prev: AppState, next: AppState): Promise<void> {
     const user = auth.currentUser;
-    if (!user) return; // Unauthenticated local mode
+    if (!user) return;
 
     try {
       this.status = { ...this.status, state: 'syncing' };
@@ -1394,9 +1309,7 @@ export class FirestoreSyncService {
         }
       };
 
-      // 1. Settings
-            if (prev.settings.updatedAt !== next.settings.updatedAt) {
-        // Guard: Never push demo settings to user Firestore account
+      if (prev.settings.updatedAt !== next.settings.updatedAt) {
         if (!isDemoSettings(next.settings) || hasCustomUserSettings(next.settings)) {
           const ref = doc(db, 'users', user.uid, 'settings', 'company');
           const sanitizedSettings = sanitizeForFirestore({
@@ -1409,11 +1322,10 @@ export class FirestoreSyncService {
         }
       }
 
-      // 2. Products (Added / Updated)
       const prevProductMap = new Map(prev.products.map((p) => [p.id, p]));
       const nextProductMap = new Map(next.products.map((p) => [p.id, p]));
 
-            for (const [id, nextP] of nextProductMap) {
+      for (const [id, nextP] of nextProductMap) {
         const prevP = prevProductMap.get(id);
         if (
           !prevP ||
@@ -1431,7 +1343,6 @@ export class FirestoreSyncService {
         }
       }
 
-      // Products (Deleted) → [TÂCHE #1] Soft delete
       for (const [id] of prevProductMap) {
         if (!nextProductMap.has(id)) {
           const ref = doc(db, 'users', user.uid, 'products', id);
@@ -1441,7 +1352,6 @@ export class FirestoreSyncService {
         }
       }
 
-      // 3. Stock Movements (Added)
       const prevMovementIds = new Set(prev.movements.map((m) => m.id));
       for (const m of next.movements) {
         if (!prevMovementIds.has(m.id)) {
@@ -1452,11 +1362,10 @@ export class FirestoreSyncService {
         }
       }
 
-      // 4. Clients (Added / Updated)
       const prevClientMap = new Map(prev.clients.map((c) => [c.id, c]));
       const nextClientMap = new Map(next.clients.map((c) => [c.id, c]));
 
-            for (const [id, nextC] of nextClientMap) {
+      for (const [id, nextC] of nextClientMap) {
         const prevC = prevClientMap.get(id);
         if (!prevC || prevC.updatedAt !== nextC.updatedAt) {
           const ref = doc(db, 'users', user.uid, 'clients', id);
@@ -1470,7 +1379,6 @@ export class FirestoreSyncService {
         }
       }
 
-      // Clients (Deleted) → [TÂCHE #1] Soft delete
       for (const [id] of prevClientMap) {
         if (!nextClientMap.has(id)) {
           const ref = doc(db, 'users', user.uid, 'clients', id);
@@ -1480,11 +1388,10 @@ export class FirestoreSyncService {
         }
       }
 
-      // 5. Invoices (Added / Updated)
       const prevInvoiceMap = new Map(prev.invoices.map((i) => [i.id, i]));
       const nextInvoiceMap = new Map(next.invoices.map((i) => [i.id, i]));
 
-            for (const [id, nextI] of nextInvoiceMap) {
+      for (const [id, nextI] of nextInvoiceMap) {
         const prevI = prevInvoiceMap.get(id);
         if (!prevI || prevI.updatedAt !== nextI.updatedAt) {
           const ref = doc(db, 'users', user.uid, 'invoices', id);
@@ -1498,7 +1405,6 @@ export class FirestoreSyncService {
         }
       }
 
-      // Invoices (Deleted) → [TÂCHE #1] Soft delete
       for (const [id] of prevInvoiceMap) {
         if (!nextInvoiceMap.has(id)) {
           const ref = doc(db, 'users', user.uid, 'invoices', id);
@@ -1508,11 +1414,10 @@ export class FirestoreSyncService {
         }
       }
 
-      // 6. Quotes (Added / Updated)
       const prevQuoteMap = new Map(prev.quotes.map((q) => [q.id, q]));
       const nextQuoteMap = new Map(next.quotes.map((q) => [q.id, q]));
 
-            for (const [id, nextQ] of nextQuoteMap) {
+      for (const [id, nextQ] of nextQuoteMap) {
         const prevQ = prevQuoteMap.get(id);
         if (!prevQ || prevQ.updatedAt !== nextQ.updatedAt) {
           const ref = doc(db, 'users', user.uid, 'quotes', id);
@@ -1526,7 +1431,6 @@ export class FirestoreSyncService {
         }
       }
 
-      // Quotes (Deleted) → [TÂCHE #1] Soft delete
       for (const [id] of prevQuoteMap) {
         if (!nextQuoteMap.has(id)) {
           const ref = doc(db, 'users', user.uid, 'quotes', id);
@@ -1536,7 +1440,6 @@ export class FirestoreSyncService {
         }
       }
 
-      // 7. Payments (Added)
       const prevPaymentIds = new Set(prev.payments.map((p) => p.id));
       for (const p of next.payments) {
         if (!prevPaymentIds.has(p.id)) {
@@ -1547,11 +1450,10 @@ export class FirestoreSyncService {
         }
       }
 
-      // 8. Categories (Added / Updated / Deleted)
       const prevCatMap = new Map(prev.categories.map((c) => [c.id, c]));
       const nextCatMap = new Map(next.categories.map((c) => [c.id, c]));
 
-            for (const [id, nextCat] of nextCatMap) {
+      for (const [id, nextCat] of nextCatMap) {
         const prevCat = prevCatMap.get(id);
         if (!prevCat || !prevCat.id || !nextCat.id) {
           const ref = doc(db, 'users', user.uid, 'categories', id);
@@ -1561,7 +1463,6 @@ export class FirestoreSyncService {
         }
       }
 
-      // Categories (Deleted) → [TÂCHE #1] Soft delete
       for (const [id] of prevCatMap) {
         if (!nextCatMap.has(id)) {
           const ref = doc(db, 'users', user.uid, 'categories', id);
@@ -1571,7 +1472,6 @@ export class FirestoreSyncService {
         }
       }
 
-      // 9. Closures (Added)
       if (next.closures) {
         const prevClosuresIds = new Set((prev.closures || []).map((cl) => cl.id));
         for (const cl of next.closures) {
@@ -1584,12 +1484,11 @@ export class FirestoreSyncService {
         }
       }
 
-      // 10. Returns (Added / Updated / Deleted)
       if (next.returns) {
         const prevReturnsMap = new Map((prev.returns || []).map((r) => [r.id, r]));
         const nextReturnsMap = new Map(next.returns.map((r) => [r.id, r]));
 
-                for (const [id, nextRet] of nextReturnsMap) {
+        for (const [id, nextRet] of nextReturnsMap) {
           const prevRet = prevReturnsMap.get(id);
           if (!prevRet || prevRet.updatedAt !== nextRet.updatedAt) {
             const ref = doc(db, 'users', user.uid, 'returns', id);
@@ -1599,7 +1498,6 @@ export class FirestoreSyncService {
           }
         }
 
-        // Returns (Deleted) → [TÂCHE #1] Soft delete
         for (const [id] of prevReturnsMap) {
           if (!nextReturnsMap.has(id)) {
             const ref = doc(db, 'users', user.uid, 'returns', id);
@@ -1642,7 +1540,6 @@ export class FirestoreSyncService {
     }
   }
 
-  // --- Granular direct entity sync helpers ---
   public async syncProduct(product: Product): Promise<void> {
     const user = auth.currentUser;
     if (!user) return;
@@ -1658,10 +1555,16 @@ export class FirestoreSyncService {
     }
   }
 
-  // [TÂCHE #1] Soft delete
   public async deleteProduct(productId: string): Promise<void> {
     const user = auth.currentUser;
     if (!user) return;
+    
+    // ✅ NOUVEAU : On mémorise l'ID supprimé pour éviter qu'il réapparaisse
+    this.recentlyDeletedIds.add(productId);
+    setTimeout(() => {
+      this.recentlyDeletedIds.delete(productId);
+    }, 10000); // On le garde en mémoire 10 secondes
+
     try {
       const ref = doc(db, 'users', user.uid, 'products', productId);
       await setDoc(ref, { _deleted: true, updatedAt: new Date().toISOString() }, { merge: true });
@@ -1698,10 +1601,13 @@ export class FirestoreSyncService {
     }
   }
 
-  // [TÂCHE #1] Soft delete
   public async deleteClient(clientId: string): Promise<void> {
     const user = auth.currentUser;
     if (!user) return;
+    
+    this.recentlyDeletedIds.add(clientId);
+    setTimeout(() => this.recentlyDeletedIds.delete(clientId), 10000);
+
     try {
       const ref = doc(db, 'users', user.uid, 'clients', clientId);
       await setDoc(ref, { _deleted: true, updatedAt: new Date().toISOString() }, { merge: true });
@@ -1726,10 +1632,13 @@ export class FirestoreSyncService {
     }
   }
 
-  // [TÂCHE #1] Soft delete
   public async deleteInvoice(invoiceId: string): Promise<void> {
     const user = auth.currentUser;
     if (!user) return;
+    
+    this.recentlyDeletedIds.add(invoiceId);
+    setTimeout(() => this.recentlyDeletedIds.delete(invoiceId), 10000);
+
     try {
       const ref = doc(db, 'users', user.uid, 'invoices', invoiceId);
       await setDoc(ref, { _deleted: true, updatedAt: new Date().toISOString() }, { merge: true });
@@ -1754,10 +1663,13 @@ export class FirestoreSyncService {
     }
   }
 
-  // [TÂCHE #1] Soft delete
   public async deleteQuote(quoteId: string): Promise<void> {
     const user = auth.currentUser;
     if (!user) return;
+    
+    this.recentlyDeletedIds.add(quoteId);
+    setTimeout(() => this.recentlyDeletedIds.delete(quoteId), 10000);
+
     try {
       const ref = doc(db, 'users', user.uid, 'quotes', quoteId);
       await setDoc(ref, { _deleted: true, updatedAt: new Date().toISOString() }, { merge: true });
@@ -1782,7 +1694,6 @@ export class FirestoreSyncService {
   public async syncSettings(settings: CompanySettings): Promise<void> {
     const user = auth.currentUser;
     if (!user) return;
-    // Guard: Never push pure demo settings to cloud
     if (isDemoSettings(settings) && !hasCustomUserSettings(settings)) {
       console.warn('[FirestoreSync] syncSettings rejected demo settings sync to cloud');
       return;
@@ -1811,10 +1722,13 @@ export class FirestoreSyncService {
     }
   }
 
-  // [TÂCHE #1] Soft delete
   public async deleteCategory(categoryId: string): Promise<void> {
     const user = auth.currentUser;
     if (!user) return;
+    
+    this.recentlyDeletedIds.add(categoryId);
+    setTimeout(() => this.recentlyDeletedIds.delete(categoryId), 10000);
+
     try {
       const ref = doc(db, 'users', user.uid, 'categories', categoryId);
       await setDoc(ref, { _deleted: true, updatedAt: new Date().toISOString() }, { merge: true });
@@ -1848,10 +1762,13 @@ export class FirestoreSyncService {
     }
   }
 
-  // [TÂCHE #1] Soft delete
   public async deleteRestockRequest(requestId: string): Promise<void> {
     const user = auth.currentUser;
     if (!user) return;
+    
+    this.recentlyDeletedIds.add(requestId);
+    setTimeout(() => this.recentlyDeletedIds.delete(requestId), 10000);
+
     try {
       const ref = doc(db, 'users', user.uid, 'restockRequests', requestId);
       await setDoc(ref, { _deleted: true, updatedAt: new Date().toISOString() }, { merge: true });
@@ -1873,10 +1790,13 @@ export class FirestoreSyncService {
     }
   }
 
-  // [TÂCHE #1] Soft delete
   public async deleteReturn(returnId: string): Promise<void> {
     const user = auth.currentUser;
     if (!user) return;
+    
+    this.recentlyDeletedIds.add(returnId);
+    setTimeout(() => this.recentlyDeletedIds.delete(returnId), 10000);
+
     try {
       const ref = doc(db, 'users', user.uid, 'returns', returnId);
       await setDoc(ref, { _deleted: true, updatedAt: new Date().toISOString() }, { merge: true });
@@ -1886,24 +1806,13 @@ export class FirestoreSyncService {
     }
   }
 
-  /**
-   * Complete resynchronization of a newly restored state to Firestore Cloud.
-   * Ensures all collections are fully written to the authenticated user's cloud database.
-   */
   public async syncFullRestoredState(restoredState: AppState): Promise<boolean> {
     const user = auth.currentUser;
-    if (!user) return true; // Local-only mode
+    if (!user) return true;
     return await this.migrateLocalToCloud(user.uid, restoredState);
   }
 
-  /**
-   * Atomic Firestore transaction for a sale:
-   * 1. Reads latest cloud product documents.
-   * 2. Checks sufficiency if allowNegativeStock is false.
-   * 3. Atomically decrements product stock without lost updates.
-   * 4. Writes the invoice, payment, and movements all in the same atomic transaction.
-   */
-   public async commitSaleStockTransaction(params: {
+  public async commitSaleStockTransaction(params: {
     userId: string;
     invoice: Invoice;
     payment?: PaymentRecord;
@@ -1917,11 +1826,6 @@ export class FirestoreSyncService {
       let confirmedInvoiceNumber: string | undefined;
 
       await runTransaction(db, async (transaction) => {
-        // =====================================================
-        // PHASE 1 : TOUTES LES LECTURES (obligatoire Firestore)
-        // =====================================================
-
-        // Step 1a: Read all catalog products involved in the sale
         const productReads: Array<{ ref: any; currentStock: number; id: string; designation: string; qty: number }> = [];
 
         for (const item of items) {
@@ -1941,7 +1845,6 @@ export class FirestoreSyncService {
           }
         }
 
-        // Step 1b: Read current nextInvoiceNumber from Firestore BEFORE any write
         const settingsRef = doc(db, 'users', userId, 'settings', 'company');
         const settingsSnap = await transaction.get(settingsRef);
 
@@ -1957,14 +1860,9 @@ export class FirestoreSyncService {
           }
         }
 
-        // Génération du numéro définitif côté serveur
         const year = new Date().getFullYear();
         const padded = String(currentNumber).padStart(4, '0');
         confirmedInvoiceNumber = `${prefix}${year}-${padded}`;
-
-        // =====================================================
-        // PHASE 2 : VALIDATION (pas de lecture)
-        // =====================================================
 
         if (!allowNegativeStock) {
           for (const pr of productReads) {
@@ -1976,13 +1874,8 @@ export class FirestoreSyncService {
           }
         }
 
-        // =====================================================
-        // PHASE 3 : TOUTES LES ÉCRITURES
-        // =====================================================
-
         const nowIso = new Date().toISOString();
 
-        // Step 3: Update product stocks
         for (const pr of productReads) {
           const newStock = pr.currentStock - pr.qty;
           transaction.update(pr.ref, {
@@ -1992,7 +1885,6 @@ export class FirestoreSyncService {
           updatedStocks[pr.id] = newStock;
         }
 
-        // Step 4: Save the invoice (avec le numéro confirmé)
         const invRef = doc(db, 'users', userId, 'invoices', invoice.id);
         transaction.set(invRef, sanitizeForFirestore({
           ...invoice,
@@ -2000,7 +1892,6 @@ export class FirestoreSyncService {
           updatedAt: nowIso,
         }));
 
-        // Step 5: Save payment if provided
         if (payment) {
           const payRef = doc(db, 'users', userId, 'payments', payment.id);
           transaction.set(payRef, sanitizeForFirestore({
@@ -2009,13 +1900,11 @@ export class FirestoreSyncService {
           }));
         }
 
-        // Step 6: Save each stock movement
         for (const mov of movements) {
           const movRef = doc(db, 'users', userId, 'movements', mov.id);
           transaction.set(movRef, sanitizeForFirestore(mov));
         }
 
-        // Step 7: Increment nextInvoiceNumber atomically
         transaction.set(
           settingsRef,
           { nextInvoiceNumber: increment(1) },
@@ -2035,9 +1924,6 @@ export class FirestoreSyncService {
     }
   }
 
-  /**
-   * Atomic Firestore transaction for manual stock movements and adjustments
-   */
   public async commitStockMovementTransaction(params: {
     userId: string;
     movement: StockMovement;
@@ -2071,12 +1957,9 @@ export class FirestoreSyncService {
           targetStock = quantity;
         }
 
-                calculatedNewStock = targetStock;
+        calculatedNewStock = targetStock;
         const nowIso = new Date().toISOString();
 
-        // [BONUS] Pour 'in' et 'out', on utilise increment(delta) pour éviter les lost updates
-        // si deux appareils font un mouvement simultanément. Pour 'adjustment', on écrit
-        // une valeur absolue (c'est un ajustement, pas un delta).
         if (type === 'adjustment') {
           transaction.update(pRef, {
             stockQuantity: targetStock,
@@ -2108,9 +1991,6 @@ export class FirestoreSyncService {
     }
   }
 
-  /**
-   * Atomic Firestore transaction for invoice cancellation and stock recovery
-   */
   public async commitCancelInvoiceTransaction(params: {
     userId: string;
     invoiceId: string;
@@ -2122,7 +2002,6 @@ export class FirestoreSyncService {
       const nowIso = new Date().toISOString();
 
       await runTransaction(db, async (transaction) => {
-        // Read products
         const pReads: Array<{ ref: any; currentStock: number; qty: number }> = [];
         for (const item of itemsToRestore) {
           const pRef = doc(db, 'users', userId, 'products', item.productId);
@@ -2136,7 +2015,6 @@ export class FirestoreSyncService {
           }
         }
 
-        // Restore stock
         for (const pr of pReads) {
           transaction.update(pr.ref, {
             stockQuantity: pr.currentStock + pr.qty,
@@ -2144,14 +2022,12 @@ export class FirestoreSyncService {
           });
         }
 
-        // Update invoice status
         const invRef = doc(db, 'users', userId, 'invoices', invoiceId);
         transaction.update(invRef, {
           status: 'cancelled',
           updatedAt: nowIso,
         });
 
-        // Add return movements
         for (const m of movements) {
           const mRef = doc(db, 'users', userId, 'movements', m.id);
           transaction.set(mRef, sanitizeForFirestore(m));

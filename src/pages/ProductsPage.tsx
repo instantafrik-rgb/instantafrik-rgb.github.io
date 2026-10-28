@@ -71,8 +71,8 @@ export const ProductsPage: React.FC = () => {
   const [formCategoryId, setFormCategoryId] = useState('');
   const [formPurchasePrice, setFormPurchasePrice] = useState<number>(0);
   const [formSellingPrice, setFormSellingPrice] = useState<number>(0);
-  const [formStockQuantity, setFormStockQuantity] = useState<number>(0);
-  const [formMinStockAlert, setFormMinStockAlert] = useState<number>(5);
+  const [formStockQuantity, setFormStockQuantity] = useState<number | ''>('');
+  const [formMinStockAlert, setFormMinStockAlert] = useState<number | ''>('');
   const [formUnit, setFormUnit] = useState('pièce');
   const [formDescription, setFormDescription] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
@@ -165,8 +165,8 @@ export const ProductsPage: React.FC = () => {
     setFormCategoryId(state.categories[0]?.id || '');
     setFormPurchasePrice(0);
     setFormSellingPrice(0);
-    setFormStockQuantity(0);
-    setFormMinStockAlert(5);
+    setFormStockQuantity('');
+    setFormMinStockAlert('');
     setFormUnit('pièce');
     setFormDescription('');
     setFormImageUrl('');
@@ -261,7 +261,7 @@ export const ProductsPage: React.FC = () => {
           purchasePrice: Math.max(0, formPurchasePrice || 0),
           sellingPrice: Math.max(0, formSellingPrice || 0),
           stockQuantity: Math.max(0, formStockQuantity || 0),
-          minStockAlert: Math.max(0, formMinStockAlert || 5),
+          minStockAlert: Math.max(0, formMinStockAlert || 0),
           unit: formUnit.trim() || 'pièce',
           description: formDescription.trim() || undefined,
           imageUrl: formImageUrl.trim() || undefined,
@@ -1001,9 +1001,13 @@ export const ProductsPage: React.FC = () => {
                   <input
                     type="number"
                     min="0"
+                    placeholder="0"
                     disabled={Boolean(editingProduct)}
                     value={formStockQuantity}
-                    onChange={(e) => setFormStockQuantity(parseInt(e.target.value, 10) || 0)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormStockQuantity(val === '' ? '' : parseInt(val, 10));
+                    }}
                     className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 disabled:opacity-60 text-xs sm:text-sm font-bold text-slate-900 dark:text-white font-mono"
                   />
                 </div>
@@ -1015,8 +1019,12 @@ export const ProductsPage: React.FC = () => {
                   <input
                     type="number"
                     min="0"
+                    placeholder="5"
                     value={formMinStockAlert}
-                    onChange={(e) => setFormMinStockAlert(parseInt(e.target.value, 10) || 0)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormMinStockAlert(val === '' ? '' : parseInt(val, 10));
+                    }}
                     className="w-full h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs sm:text-sm font-bold text-slate-900 dark:text-white font-mono"
                   />
                 </div>
