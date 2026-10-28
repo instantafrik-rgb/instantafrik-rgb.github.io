@@ -31,13 +31,25 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 // Initialize Firestore with robust multi-tab offline persistence
 let firestoreInstance: Firestore;
 try {
-  firestoreInstance = initializeFirestore(app, {
-    localCache: persistentLocalCache({
-      tabManager: persistentMultipleTabManager(),
-    }),
-  });
+  // ✅ Détecte si on est dans Electron ou une PWA installée
+  const isStandalone = 
+    (window as any).electronAPI?.isElectron === true ||
+    window.matchMedia('(display-mode: standalone)').matches;
+
+  if (isStandalone) {
+    // Sur Electron / Android APK : pas de cache multi-onglets, connexion directe
+    firestoreInstance = initializeFirestore(app, {
+      localCache: persistentLocalCache(), // Cache simple, sans multi-onglets
+    });
+  } else {
+    // Sur Web classique : garder le cache multi-onglets
+    firestoreInstance = initializeFirestore(app, {
+      localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager(),
+      }),
+    });
+  }
 } catch (e) {
-  // If already initialized or persistent cache not supported in environment
   firestoreInstance = getFirestore(app);
 }
 
