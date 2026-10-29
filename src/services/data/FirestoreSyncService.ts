@@ -3,11 +3,11 @@
  *
  * [FIX-SYNC] Version corrigée basée sur OLD (qui marchait) :
  *  - Correctif 1 : { merge: true } dans les 6 syncLocalXxxIfCloudEmpty
- *                  → n'écrase plus _deleted: true côté cloud (fin des résurrections)
  *  - Correctif 2 : traque des remoteDeletedIds dans les 6 listeners
- *                  → un produit supprimé sur un autre appareil n'est jamais réinjecté
  *  - Aucune rustine recentlyDeletedIds (Bug 2 jamais introduit)
- *  - La synchro temps réel multi-appareils fonctionne comme avant
+ *
+ * [FIX-TRANSACTION] Toutes les lectures (transaction.get) sont exécutées
+ * AVANT toutes les écritures (transaction.set/update) dans commitSaleStockTransaction.
  */
 
 import {
@@ -597,7 +597,6 @@ export class FirestoreSyncService {
       (snap) => {
         if (this.onRemoteUpdateCallback) {
           const remoteProducts: Product[] = [];
-          // [FIX-SYNC] Traque des IDs supprimés côté cloud
           const remoteDeletedIds = new Set<string>();
 
           snap.forEach((d) => {
@@ -614,7 +613,6 @@ export class FirestoreSyncService {
                 remoteProducts.push(item);
               }
             } else {
-              // [FIX-SYNC] Produit supprimé dans le cloud (par un autre appareil)
               remoteDeletedIds.add(d.id);
             }
           });
@@ -629,7 +627,6 @@ export class FirestoreSyncService {
             const cleanPrevProducts = (prev.products || []).filter((p) => !isDemoProduct(p));
 
             if (remoteProducts.length === 0 && cleanPrevProducts.length > 0) {
-              // [FIX-SYNC] Ne réuploader que les produits NON supprimés côté cloud
               const toUpload = cleanPrevProducts.filter((p) => !remoteDeletedIds.has(p.id));
               if (toUpload.length > 0) {
                 this.syncLocalProductsIfCloudEmpty(userId, toUpload);
@@ -639,7 +636,6 @@ export class FirestoreSyncService {
             }
 
             const remoteIds = new Set(remoteProducts.map((p) => p.id));
-            // [FIX-SYNC] Exclut aussi les produits supprimés côté cloud
             const pendingLocal = cleanPrevProducts.filter(
               (p) =>
                 !remoteIds.has(p.id) &&
@@ -673,7 +669,7 @@ export class FirestoreSyncService {
       (snap) => {
         if (this.onRemoteUpdateCallback) {
           const remoteInvoices: Invoice[] = [];
-          const remoteDeletedIds = new Set<string>(); // [FIX-SYNC]
+          const remoteDeletedIds = new Set<string>();
 
           snap.forEach((d) => {
             const data = d.data() as Invoice & { _deleted?: boolean };
@@ -689,7 +685,7 @@ export class FirestoreSyncService {
                 remoteInvoices.push(item);
               }
             } else {
-              remoteDeletedIds.add(d.id); // [FIX-SYNC]
+              remoteDeletedIds.add(d.id);
             }
           });
 
@@ -703,11 +699,11 @@ export class FirestoreSyncService {
             const cleanPrevInvoices = (prev.invoices || []).filter((i) => !isDemoInvoice(i));
 
             if (remoteInvoices.length === 0 && cleanPrevInvoices.length > 0) {
-              const toUpload = cleanPrevInvoices.filter((i) => !remoteDeletedIds.has(i.id)); // [FIX-SYNC]
+              const toUpload = cleanPrevInvoices.filter((i) => !remoteDeletedIds.has(i.id));
               if (toUpload.length > 0) {
                 this.syncLocalInvoicesIfCloudEmpty(userId, toUpload);
               }
-              const remaining = cleanPrevInvoices.filter((i) => !remoteDeletedIds.has(i.id)); // [FIX-SYNC]
+              const remaining = cleanPrevInvoices.filter((i) => !remoteDeletedIds.has(i.id));
               return { ...prev, invoices: remaining };
             }
 
@@ -715,7 +711,7 @@ export class FirestoreSyncService {
             const pendingLocal = cleanPrevInvoices.filter(
               (i) =>
                 !remoteIds.has(i.id) &&
-                !remoteDeletedIds.has(i.id) && // [FIX-SYNC]
+                !remoteDeletedIds.has(i.id) &&
                 isRecentlyCreated(i.createdAt)
             );
 
@@ -745,7 +741,7 @@ export class FirestoreSyncService {
       (snap) => {
         if (this.onRemoteUpdateCallback) {
           const remoteClients: Client[] = [];
-          const remoteDeletedIds = new Set<string>(); // [FIX-SYNC]
+          const remoteDeletedIds = new Set<string>();
 
           snap.forEach((d) => {
             const data = d.data() as Client & { _deleted?: boolean };
@@ -761,7 +757,7 @@ export class FirestoreSyncService {
                 remoteClients.push(item);
               }
             } else {
-              remoteDeletedIds.add(d.id); // [FIX-SYNC]
+              remoteDeletedIds.add(d.id);
             }
           });
 
@@ -775,11 +771,11 @@ export class FirestoreSyncService {
             const cleanPrevClients = (prev.clients || []).filter((c) => !isDemoClient(c));
 
             if (remoteClients.length === 0 && cleanPrevClients.length > 0) {
-              const toUpload = cleanPrevClients.filter((c) => !remoteDeletedIds.has(c.id)); // [FIX-SYNC]
+              const toUpload = cleanPrevClients.filter((c) => !remoteDeletedIds.has(c.id));
               if (toUpload.length > 0) {
                 this.syncLocalClientsIfCloudEmpty(userId, toUpload);
               }
-              const remaining = cleanPrevClients.filter((c) => !remoteDeletedIds.has(c.id)); // [FIX-SYNC]
+              const remaining = cleanPrevClients.filter((c) => !remoteDeletedIds.has(c.id));
               return { ...prev, clients: remaining };
             }
 
@@ -787,7 +783,7 @@ export class FirestoreSyncService {
             const pendingLocal = cleanPrevClients.filter(
               (c) =>
                 !remoteIds.has(c.id) &&
-                !remoteDeletedIds.has(c.id) && // [FIX-SYNC]
+                !remoteDeletedIds.has(c.id) &&
                 isRecentlyCreated(c.createdAt)
             );
 
@@ -817,7 +813,7 @@ export class FirestoreSyncService {
       (snap) => {
         if (this.onRemoteUpdateCallback) {
           const remoteQuotes: Quote[] = [];
-          const remoteDeletedIds = new Set<string>(); // [FIX-SYNC]
+          const remoteDeletedIds = new Set<string>();
 
           snap.forEach((d) => {
             const data = d.data() as Quote & { _deleted?: boolean };
@@ -833,7 +829,7 @@ export class FirestoreSyncService {
                 remoteQuotes.push(item);
               }
             } else {
-              remoteDeletedIds.add(d.id); // [FIX-SYNC]
+              remoteDeletedIds.add(d.id);
             }
           });
 
@@ -843,11 +839,11 @@ export class FirestoreSyncService {
             const cleanPrevQuotes = (prev.quotes || []).filter((q) => !isDemoQuote(q));
 
             if (remoteQuotes.length === 0 && cleanPrevQuotes.length > 0) {
-              const toUpload = cleanPrevQuotes.filter((q) => !remoteDeletedIds.has(q.id)); // [FIX-SYNC]
+              const toUpload = cleanPrevQuotes.filter((q) => !remoteDeletedIds.has(q.id));
               if (toUpload.length > 0) {
                 this.syncLocalQuotesIfCloudEmpty(userId, toUpload);
               }
-              const remaining = cleanPrevQuotes.filter((q) => !remoteDeletedIds.has(q.id)); // [FIX-SYNC]
+              const remaining = cleanPrevQuotes.filter((q) => !remoteDeletedIds.has(q.id));
               return { ...prev, quotes: remaining };
             }
 
@@ -855,7 +851,7 @@ export class FirestoreSyncService {
             const pendingLocal = cleanPrevQuotes.filter(
               (q) =>
                 !remoteIds.has(q.id) &&
-                !remoteDeletedIds.has(q.id) && // [FIX-SYNC]
+                !remoteDeletedIds.has(q.id) &&
                 isRecentlyCreated(q.createdAt)
             );
 
@@ -885,13 +881,13 @@ export class FirestoreSyncService {
       (snap) => {
         if (this.onRemoteUpdateCallback) {
           const remotePayments: PaymentRecord[] = [];
-          const remoteDeletedIds = new Set<string>(); // [FIX-SYNC]
+          const remoteDeletedIds = new Set<string>();
 
           snap.forEach((d) => {
             const item = { ...(d.data() as PaymentRecord), id: d.id };
             const data = d.data() as PaymentRecord & { _deleted?: boolean };
             if (data._deleted) {
-              remoteDeletedIds.add(d.id); // [FIX-SYNC]
+              remoteDeletedIds.add(d.id);
               return;
             }
             if (isDemoPayment(item)) {
@@ -911,11 +907,11 @@ export class FirestoreSyncService {
             const cleanPrevPayments = (prev.payments || []).filter((p) => !isDemoPayment(p));
 
             if (remotePayments.length === 0 && cleanPrevPayments.length > 0) {
-              const toUpload = cleanPrevPayments.filter((p) => !remoteDeletedIds.has(p.id)); // [FIX-SYNC]
+              const toUpload = cleanPrevPayments.filter((p) => !remoteDeletedIds.has(p.id));
               if (toUpload.length > 0) {
                 this.syncLocalPaymentsIfCloudEmpty(userId, toUpload);
               }
-              const remaining = cleanPrevPayments.filter((p) => !remoteDeletedIds.has(p.id)); // [FIX-SYNC]
+              const remaining = cleanPrevPayments.filter((p) => !remoteDeletedIds.has(p.id));
               return { ...prev, payments: remaining };
             }
 
@@ -923,7 +919,7 @@ export class FirestoreSyncService {
             const pendingLocal = cleanPrevPayments.filter(
               (p) =>
                 !remoteIds.has(p.id) &&
-                !remoteDeletedIds.has(p.id) && // [FIX-SYNC]
+                !remoteDeletedIds.has(p.id) &&
                 isRecentlyCreated(p.createdAt)
             );
 
@@ -953,13 +949,13 @@ export class FirestoreSyncService {
       (snap) => {
         if (this.onRemoteUpdateCallback) {
           const remoteMovements: StockMovement[] = [];
-          const remoteDeletedIds = new Set<string>(); // [FIX-SYNC]
+          const remoteDeletedIds = new Set<string>();
 
           snap.forEach((d) => {
             const item = { ...(d.data() as StockMovement), id: d.id };
             const data = d.data() as StockMovement & { _deleted?: boolean };
             if (data._deleted) {
-              remoteDeletedIds.add(d.id); // [FIX-SYNC]
+              remoteDeletedIds.add(d.id);
               return;
             }
             if (isDemoMovement(item)) {
@@ -979,11 +975,11 @@ export class FirestoreSyncService {
             const cleanPrevMovements = (prev.movements || []).filter((m) => !isDemoMovement(m));
 
             if (remoteMovements.length === 0 && cleanPrevMovements.length > 0) {
-              const toUpload = cleanPrevMovements.filter((m) => !remoteDeletedIds.has(m.id)); // [FIX-SYNC]
+              const toUpload = cleanPrevMovements.filter((m) => !remoteDeletedIds.has(m.id));
               if (toUpload.length > 0) {
                 this.syncLocalMovementsIfCloudEmpty(userId, toUpload);
               }
-              const remaining = cleanPrevMovements.filter((m) => !remoteDeletedIds.has(m.id)); // [FIX-SYNC]
+              const remaining = cleanPrevMovements.filter((m) => !remoteDeletedIds.has(m.id));
               return { ...prev, movements: remaining };
             }
 
@@ -991,7 +987,7 @@ export class FirestoreSyncService {
             const pendingLocal = cleanPrevMovements.filter(
               (m) =>
                 !remoteIds.has(m.id) &&
-                !remoteDeletedIds.has(m.id) && // [FIX-SYNC]
+                !remoteDeletedIds.has(m.id) &&
                 isRecentlyCreated(m.createdAt)
             );
 
@@ -1014,7 +1010,7 @@ export class FirestoreSyncService {
     );
     this.activeSubscriptions.push(unsubMovements);
 
-    // 8. Categories (pas de soft-delete dans le listener actuel, inchangé)
+    // 8. Categories
     const categoriesRef = collection(db, 'users', userId, 'categories');
     const unsubCategories = onSnapshot(
       categoriesRef,
@@ -1125,7 +1121,6 @@ export class FirestoreSyncService {
     this.activeSubscriptions.push(unsubReturns);
   }
 
-  // --- [FIX-SYNC] Auto-upload helpers : { merge: true } pour ne PAS écraser _deleted: true ---
   private async syncLocalClientsIfCloudEmpty(userId: string, clients: Client[]) {
     const cleanClients = (clients || []).filter((c) => !isDemoClient(c));
     if (cleanClients.length === 0) return;
@@ -1134,7 +1129,6 @@ export class FirestoreSyncService {
       let count = 0;
       for (const client of cleanClients) {
         const ref = doc(db, 'users', userId, 'clients', client.id);
-        // [FIX-SYNC] merge:true → n'écrase jamais _deleted:true posé par un autre appareil
         batch.set(ref, sanitizeForFirestore({
           ...client,
           updatedAt: client.updatedAt || new Date().toISOString(),
@@ -1162,7 +1156,6 @@ export class FirestoreSyncService {
       let count = 0;
       for (const product of cleanProducts) {
         const ref = doc(db, 'users', userId, 'products', product.id);
-        // [FIX-SYNC] merge:true
         batch.set(ref, sanitizeForFirestore({
           ...product,
           updatedAt: product.updatedAt || new Date().toISOString(),
@@ -1189,7 +1182,6 @@ export class FirestoreSyncService {
       let count = 0;
       for (const inv of cleanInvoices) {
         const ref = doc(db, 'users', userId, 'invoices', inv.id);
-        // [FIX-SYNC] merge:true
         batch.set(ref, sanitizeForFirestore({
           ...inv,
           updatedAt: inv.updatedAt || new Date().toISOString(),
@@ -1216,7 +1208,6 @@ export class FirestoreSyncService {
       let count = 0;
       for (const q of cleanQuotes) {
         const ref = doc(db, 'users', userId, 'quotes', q.id);
-        // [FIX-SYNC] merge:true
         batch.set(ref, sanitizeForFirestore({
           ...q,
           updatedAt: q.updatedAt || new Date().toISOString(),
@@ -1242,7 +1233,6 @@ export class FirestoreSyncService {
       let count = 0;
       for (const p of payments) {
         const ref = doc(db, 'users', userId, 'payments', p.id);
-        // [FIX-SYNC] merge:true
         batch.set(ref, sanitizeForFirestore(p), { merge: true });
         count++;
         if (count >= 400) {
@@ -1264,7 +1254,6 @@ export class FirestoreSyncService {
       let count = 0;
       for (const m of movements) {
         const ref = doc(db, 'users', userId, 'movements', m.id);
-        // [FIX-SYNC] merge:true
         batch.set(ref, sanitizeForFirestore(m), { merge: true });
         count++;
         if (count >= 400) {
@@ -1614,7 +1603,6 @@ export class FirestoreSyncService {
     }
   }
 
-  // --- Granular direct entity sync helpers ---
   public async syncProduct(product: Product): Promise<void> {
     const user = auth.currentUser;
     if (!user) return;
@@ -1856,6 +1844,7 @@ export class FirestoreSyncService {
     return await this.migrateLocalToCloud(user.uid, restoredState);
   }
 
+  // [FIX-TRANSACTION] Toutes les lectures sont exécutées AVANT toutes les écritures.
   public async commitSaleStockTransaction(params: {
     userId: string;
     invoice: Invoice;
@@ -1870,6 +1859,7 @@ export class FirestoreSyncService {
       let confirmedInvoiceNumber: string | undefined;
 
       await runTransaction(db, async (transaction) => {
+        // ===== 1. TOUTES LES LECTURES D'ABORD =====
         const productReads: Array<{ ref: any; currentStock: number; id: string; designation: string; qty: number }> = [];
 
         for (const item of items) {
@@ -1889,42 +1879,7 @@ export class FirestoreSyncService {
           }
         }
 
-        if (!allowNegativeStock) {
-          for (const pr of productReads) {
-            if (pr.currentStock < pr.qty) {
-              throw new Error(
-                `Stock insuffisant sur le Cloud pour "${pr.designation}". Disponible: ${pr.currentStock}, Demandé: ${pr.qty}.`
-              );
-            }
-          }
-        }
-
-        const nowIso = new Date().toISOString();
-        for (const pr of productReads) {
-          const newStock = pr.currentStock - pr.qty;
-          transaction.update(pr.ref, {
-            stockQuantity: newStock,
-            updatedAt: nowIso,
-          });
-          updatedStocks[pr.id] = newStock;
-        }
-
-        const invRef = doc(db, 'users', userId, 'invoices', invoice.id);
-        transaction.set(invRef, sanitizeForFirestore({
-          ...invoice,
-          updatedAt: nowIso,
-        }));
-
-        if (payment) {
-          const payRef = doc(db, 'users', userId, 'payments', payment.id);
-          transaction.set(payRef, sanitizeForFirestore(payment));
-        }
-
-        for (const mov of movements) {
-          const movRef = doc(db, 'users', userId, 'movements', mov.id);
-          transaction.set(movRef, sanitizeForFirestore(mov));
-        }
-
+        // [FIX-TRANSACTION] Lecture des settings DÉPLACÉE ICI (avant les écritures)
         const settingsRef = doc(db, 'users', userId, 'settings', 'company');
         const settingsSnap = await transaction.get(settingsRef);
 
@@ -1944,14 +1899,54 @@ export class FirestoreSyncService {
         const padded = String(currentNumber).padStart(4, '0');
         confirmedInvoiceNumber = `${prefix}${year}-${padded}`;
 
+        // Validation du stock (pas d'écriture ici)
+        if (!allowNegativeStock) {
+          for (const pr of productReads) {
+            if (pr.currentStock < pr.qty) {
+              throw new Error(
+                `Stock insuffisant sur le Cloud pour "${pr.designation}". Disponible: ${pr.currentStock}, Demandé: ${pr.qty}.`
+              );
+            }
+          }
+        }
+
+        // ===== 2. TOUTES LES ÉCRITURES ENSUITE =====
+        const nowIso = new Date().toISOString();
+
+        for (const pr of productReads) {
+          const newStock = pr.currentStock - pr.qty;
+          transaction.update(pr.ref, {
+            stockQuantity: newStock,
+            updatedAt: nowIso,
+          });
+          updatedStocks[pr.id] = newStock;
+        }
+
+        const invRef = doc(db, 'users', userId, 'invoices', invoice.id);
+        transaction.set(invRef, sanitizeForFirestore({
+          ...invoice,
+          number: confirmedInvoiceNumber,
+          updatedAt: nowIso,
+        }));
+
+        if (payment) {
+          const payRef = doc(db, 'users', userId, 'payments', payment.id);
+          transaction.set(payRef, sanitizeForFirestore({
+            ...payment,
+            invoiceNumber: confirmedInvoiceNumber,
+          }));
+        }
+
+        for (const mov of movements) {
+          const movRef = doc(db, 'users', userId, 'movements', mov.id);
+          transaction.set(movRef, sanitizeForFirestore(mov));
+        }
+
         transaction.set(
           settingsRef,
           { nextInvoiceNumber: increment(1) },
           { merge: true }
         );
-
-        const invRefConfirmed = doc(db, 'users', userId, 'invoices', invoice.id);
-        transaction.set(invRefConfirmed, { number: confirmedInvoiceNumber }, { merge: true });
       });
 
       this.markCollectionHealthy('products');
