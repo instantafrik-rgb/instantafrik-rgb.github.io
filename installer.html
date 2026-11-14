@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Installer StockFacture Pro</title>
+  <meta name="description" content="Installez StockFacture Pro sur Android, Windows ou iPhone : gestion de stock, ventes et factures, même sans internet.">
+  <meta name="theme-color" content="#F97316">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <style>
+    :root { --bg:#FAFAF8; --card:#fff; --text:#14213D; --muted:#64748B; --line:#E8EDF2; --accent:#EA580C; --ok:#059669; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#0b1220; --card:#111a2e; --text:#f1f5f9; --muted:#94a3b8; --line:#243049; } }
+    * { box-sizing: border-box; }
+    body { margin:0; background:var(--bg); color:var(--text); font:17px/1.55 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding:20px; }
+    main { width:100%; max-width:480px; margin:0 auto; }
+    .brand { text-align:center; margin:8px 0 14px; }
+    .brand img { width:84px; height:84px; border-radius:20px; }
+    h1 { font-size:26px; line-height:1.2; margin:12px 0 6px; }
+    .tag { color:var(--muted); margin:0; font-size:16px; }
+    .one { text-align:center; font-weight:700; margin:14px 0 18px; font-size:16px; }
+    #cards { display:flex; flex-direction:column; gap:14px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:22px; padding:20px; }
+    .card.mine { border:2px solid var(--accent); }
+    .card h2 { font-size:20px; margin:0 0 12px; display:flex; align-items:center; gap:8px; }
+    .badge { font-size:12px; font-weight:800; color:#fff; background:var(--accent); border-radius:999px; padding:2px 10px; }
+    .btn { display:flex; align-items:center; justify-content:center; width:100%; min-height:56px; padding:12px 16px; border:0; border-radius:16px; background:var(--accent); color:#fff; font:inherit; font-size:18px; font-weight:800; text-align:center; text-decoration:none; cursor:pointer; margin-top:10px; }
+    .btn:first-of-type { margin-top:0; }
+    .btn.alt { background:transparent; color:var(--text); border:2px solid var(--line); font-size:16px; font-weight:700; min-height:50px; }
+    ol { padding:0; margin:12px 0 0; list-style:none; counter-reset:step; }
+    ol li { counter-increment:step; display:flex; gap:12px; margin:0 0 10px; align-items:flex-start; font-size:16px; }
+    ol li::before { content:counter(step); flex:0 0 28px; height:28px; border-radius:50%; background:var(--accent); color:#fff; font-weight:800; display:flex; align-items:center; justify-content:center; font-size:14px; }
+    details { margin-top:12px; }
+    summary { cursor:pointer; color:var(--muted); font-size:15px; font-weight:600; }
+    .muted { color:var(--muted); font-size:15px; }
+    .center { text-align:center; }
+    .ok { color:var(--ok); font-weight:800; font-size:20px; margin:0 0 12px; }
+    .perks { display:flex; justify-content:center; gap:14px; flex-wrap:wrap; margin-top:18px; color:var(--muted); font-size:14px; }
+    footer { text-align:center; margin:22px 0 10px; font-size:14px; color:var(--muted); }
+    footer a { color:var(--muted); }
+    .qr { text-align:center; margin-top:18px; }
+    .qr img { width:150px; height:150px; border-radius:12px; background:#fff; padding:6px; }
+    .link { display:block; text-align:center; margin-top:14px; color:var(--muted); font-size:15px; }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="brand">
+    <img src="/pwa-192x192.png" alt="StockFacture Pro" width="84" height="84">
+    <h1>StockFacture Pro</h1>
+    <p class="tag">Votre stock, vos ventes et vos factures, même sans internet.</p>
+  </div>
+  <p class="one">Une seule licence pour tous vos appareils : Android, Windows et iPhone, avec le même compte Google.</p>
+
+  <!-- Navigateur intégré (Facebook, Instagram, TikTok…) -->
+  <div class="card" id="inapp" hidden>
+    <h2>Une étape de plus</h2>
+    <p style="margin-top:0">Vous êtes dans le navigateur d’une autre application, qui bloque l’installation. Ouvrez la page dans votre navigateur :</p>
+    <ol>
+      <li><span>Appuyez sur les <strong>trois points</strong> (⋮ ou •••) en haut ou en bas de l’écran.</span></li>
+      <li><span>Choisissez <strong>« Ouvrir dans le navigateur »</strong> ou <strong>« Ouvrir dans Chrome »</strong>.</span></li>
+    </ol>
+    <button class="btn alt" id="copyBtn" type="button" style="margin-top:14px">Copier le lien</button>
+  </div>
+
+  <!-- Déjà installée -->
+  <div class="card center" id="installed" hidden>
+    <p class="ok" id="installedMsg">Application déjà installée</p>
+    <a class="btn" href="/">Ouvrir StockFacture Pro</a>
+    <button class="btn alt" id="showAll" type="button">Installer sur un autre appareil</button>
+  </div>
+
+  <div id="cards">
+    <!-- Android -->
+    <article class="card" id="card-android">
+      <h2>📱 Android <span class="badge" id="badge-android" hidden>Votre appareil</span></h2>
+      <button class="btn" id="pwa-android" type="button" hidden>Installer en 1 clic</button>
+      <a class="btn alt" id="apkBtn" href="#" hidden>Télécharger l’application (APK)</a>
+      <details>
+        <summary>Comment installer le fichier ?</summary>
+        <ol>
+          <li><span>Téléchargez le fichier. Si Chrome indique que ce type de fichier peut être dangereux, choisissez <strong>« Télécharger quand même »</strong>.</span></li>
+          <li><span>Ouvrez-le. Si Android demande l’autorisation, appuyez sur <strong>Paramètres</strong>, activez <strong>« Autoriser depuis cette source »</strong>, puis revenez en arrière.</span></li>
+          <li><span>Appuyez sur <strong>Installer</strong>, puis sur <strong>Ouvrir</strong>.</span></li>
+        </ol>
+      </details>
+      <p class="muted" id="hint-android" hidden style="margin:12px 0 0">Sans fichier : dans Chrome, menu <strong>⋮</strong>, puis <strong>« Installer l’application »</strong>.</p>
+    </article>
+
+    <!-- Windows -->
+    <article class="card" id="card-windows">
+      <h2>💻 Windows <span class="badge" id="badge-windows" hidden>Votre appareil</span></h2>
+      <a class="btn" id="exeBtn" href="#" hidden>Télécharger pour Windows</a>
+      <button class="btn alt" id="pwa-windows" type="button" hidden>Installer depuis le navigateur (1 clic)</button>
+      <details>
+        <summary>Comment installer ?</summary>
+        <ol>
+          <li><span>Téléchargez le fichier (pour Windows 10 ou 11, 64 bits), puis ouvrez-le.</span></li>
+          <li><span>Si Windows affiche <strong>« Windows a protégé votre ordinateur »</strong>, cliquez sur <strong>« Informations complémentaires »</strong>, puis sur <strong>« Exécuter quand même »</strong>.</span></li>
+          <li><span>Suivez l’installation, puis ouvrez StockFacture Pro depuis le Bureau.</span></li>
+        </ol>
+      </details>
+      <p class="muted" id="hint-windows" hidden style="margin:12px 0 0">Sans fichier : dans Chrome ou Edge, cliquez sur l’<strong>icône d’installation</strong> à droite de la barre d’adresse.</p>
+    </article>
+
+    <!-- iPhone -->
+    <article class="card" id="card-ios">
+      <h2>🍎 iPhone <span class="badge" id="badge-ios" hidden>Votre appareil</span></h2>
+      <p class="muted" style="margin:0">Sur iPhone, l’application s’installe depuis Safari, sans fichier :</p>
+      <ol>
+        <li><span>Ouvrez cette page dans <strong>Safari</strong>.</span></li>
+        <li><span>Appuyez sur <strong>Partager</strong> (le carré avec une flèche).</span></li>
+        <li><span>Choisissez <strong>« Sur l’écran d’accueil »</strong>, puis <strong>Ajouter</strong>.</span></li>
+      </ol>
+    </article>
+  </div>
+
+  <div class="qr" id="qr" hidden>
+    <p class="muted" style="margin:0 0 8px">Sur ordinateur ? Scannez avec votre téléphone :</p>
+    <img src="/qr-installer.png" alt="QR code vers cette page" width="150" height="150">
+  </div>
+
+  <a class="link" href="/" id="browserLink">Ou utilisez l’application dans le navigateur, sans installer</a>
+
+  <div class="perks"><span>✔ Fonctionne sans internet</span><span>✔ 7 jours d’essai gratuit</span></div>
+
+  <footer>
+    Besoin d’aide ? <a id="help" href="#" target="_blank" rel="noopener">Écrivez-nous sur WhatsApp</a><br>
+    <a href="/cgu.html">Conditions</a> · <a href="/confidentialite.html">Confidentialité</a>
+  </footer>
+</main>
+
+<script>
+  // Fichiers d'installation : publiés dans une « Release » du dépôt public (voir la procédure).
+  // Laisser vide pour masquer le bouton correspondant.
+  var BASE = 'https://github.com/instantafrik-rgb/instantafrik-rgb.github.io/releases/latest/download/';
+  var APK_URL = BASE + 'StockFacture-Pro.apk';
+  var EXE_URL = BASE + 'StockFacture-Pro-Setup.exe';
+  var WHATSAPP = 'https://wa.me/22892304307?text=' + encodeURIComponent('Bonjour, j’ai besoin d’aide pour installer StockFacture Pro.');
+
+  // <pure>
+  function detect(ua) {
+    var isIos = /iPhone|iPad|iPod/i.test(ua);
+    var isAndroid = /Android/i.test(ua);
+    var inApp = /FBAN|FBAV|FB_IAB|Instagram|TikTok|musical_ly|Snapchat|; wv\)/i.test(ua);
+    return { platform: isIos ? 'ios' : (isAndroid ? 'android' : 'desktop'), inApp: inApp };
+  }
+  // Ordre d'affichage des trois cartes : l'appareil du visiteur en premier
+  function cardOrder(platform) {
+    if (platform === 'ios') return ['ios', 'android', 'windows'];
+    if (platform === 'android') return ['android', 'windows', 'ios'];
+    return ['windows', 'android', 'ios'];
+  }
+  // </pure>
+
+  var $ = function (id) { return document.getElementById(id); };
+  var info = detect(navigator.userAgent);
+  var mine = info.platform === 'desktop' ? 'windows' : info.platform;
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  var deferred = null;
+
+  $('help').href = WHATSAPP;
+  if (APK_URL) { $('apkBtn').href = APK_URL; $('apkBtn').hidden = false; }
+  if (EXE_URL) { $('exeBtn').href = EXE_URL; $('exeBtn').hidden = false; }
+
+  // Ordre des cartes et mise en avant de l'appareil du visiteur
+  cardOrder(info.platform).forEach(function (k, i) { $('card-' + k).style.order = i; });
+  $('card-' + mine).classList.add('mine');
+  $('badge-' + mine).hidden = false;
+  // Le fichier de l'appareil du visiteur devient le bouton principal ; le détail des étapes reste dépliable
+  if (mine === 'android' && APK_URL) { $('apkBtn').classList.remove('alt'); }
+  $('qr').hidden = info.platform !== 'desktop';
+
+  // Même service worker que l'application : aide le navigateur à proposer l'installation en 1 clic
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(function () { /* ignore */ });
+  }
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    deferred = e;
+    if (mine === 'android') { $('pwa-android').hidden = false; $('hint-android').hidden = true; }
+    if (mine === 'windows') { $('pwa-windows').hidden = false; $('hint-windows').hidden = true; }
+  });
+
+  function runInstall() {
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.then(function (choice) {
+      deferred = null;
+      if (choice && choice.outcome === 'accepted') done();
+    });
+  }
+  function done() {
+    $('installedMsg').textContent = 'C’est installé ! Ouvrez l’application depuis votre écran d’accueil.';
+    $('installed').hidden = false;
+    $('cards').hidden = true;
+    $('qr').hidden = true;
+  }
+  $('pwa-android').addEventListener('click', runInstall);
+  $('pwa-windows').addEventListener('click', runInstall);
+  window.addEventListener('appinstalled', done);
+
+  $('copyBtn').addEventListener('click', function () {
+    var btn = $('copyBtn');
+    var ok = function () { btn.textContent = 'Lien copié ✔'; };
+    var ko = function () { btn.textContent = 'Copiez le lien dans la barre d’adresse'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(location.href).then(ok, ko);
+    else ko();
+  });
+  $('showAll').addEventListener('click', function () {
+    $('installed').hidden = true;
+    $('cards').hidden = false;
+  });
+
+  if (standalone) {
+    $('installed').hidden = false;
+    $('cards').hidden = true;
+    $('qr').hidden = true;
+  } else if (info.inApp) {
+    $('inapp').hidden = false;
+    $('cards').hidden = true;
+    $('qr').hidden = true;
+  } else {
+    // Si le bouton automatique n'apparaît pas, on affiche l'astuce du navigateur
+    setTimeout(function () {
+      if (!deferred) {
+        if (mine === 'android') $('hint-android').hidden = false;
+        if (mine === 'windows') $('hint-windows').hidden = false;
+      }
+    }, 1800);
+  }
+</script>
+</body>
+</html>
