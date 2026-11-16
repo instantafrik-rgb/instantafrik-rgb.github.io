@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Administration – StockFacture Pro</title>
+  <link rel="manifest" href="/admin.webmanifest">
+  <meta name="theme-color" content="#F97316">
+  <link rel="icon" type="image/png" href="/admin-192.png">
+  <link rel="apple-touch-icon" href="/admin-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="SF Admin">
+  <style>
+    :root { --bg:#FAFAF8; --card:#fff; --text:#14213D; --muted:#64748B; --line:#E8EDF2; --accent:#F97316; --ok:#059669; --warn:#d97706; --bad:#e11d48; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg:#0b1220; --card:#111a2e; --text:#f1f5f9; --muted:#94a3b8; --line:#243049; }
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; padding:16px; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+    main { max-width:720px; margin:0 auto; display:grid; gap:14px; }
+    h1 { font-size:20px; margin:4px 0 0; }
+    h2 { font-size:15px; margin:0 0 10px; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; }
+    .muted { color:var(--muted); font-size:13px; }
+    label { display:block; font-size:12px; font-weight:700; color:var(--muted); margin:10px 0 4px; }
+    input, select { width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); font:inherit; }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    button { padding:11px 16px; border:0; border-radius:10px; background:var(--accent); color:#fff; font:inherit; font-weight:700; cursor:pointer; }
+    button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); }
+    button.small { padding:6px 10px; font-size:12px; }
+    button.danger { background:var(--bad); }
+    button:disabled { opacity:.55; cursor:default; }
+    .actions { display:flex; gap:8px; margin-top:14px; flex-wrap:wrap; }
+    #msg { min-height:20px; font-size:13px; font-weight:600; }
+    #msg.ok { color:var(--ok); } #msg.bad { color:var(--bad); } #msg.warn { color:var(--warn); }
+    .item { border-top:1px solid var(--line); padding:12px 0; display:grid; gap:6px; }
+    .item:first-child { border-top:0; }
+    .email { font-weight:700; word-break:break-all; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; border:1px solid currentColor; }
+    .badge.ok { color:var(--ok); } .badge.warn { color:var(--warn); } .badge.bad { color:var(--bad); }
+    .meta { font-size:12px; color:var(--muted); }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Administration des licences</h1>
+
+  <section class="card" id="authCard">
+    <p id="authText" class="muted">Connectez-vous avec votre compte administrateur.</p>
+    <div class="actions">
+      <button id="signInBtn">Se connecter avec Google</button>
+      <button id="signOutBtn" class="ghost" hidden>Se déconnecter</button>
+      <button id="installBtn" class="ghost" hidden>Installer comme application</button>
+    </div>
+    <p class="muted" id="iosHint" hidden style="margin-top:10px">Sur iPhone : bouton Partager, puis « Sur l’écran d’accueil ».</p>
+  </section>
+
+  <div id="panel" hidden>
+    <section class="card">
+      <h2>Activer ou renouveler un client</h2>
+      <form id="form" autocomplete="off">
+        <label for="email">Adresse Google du client</label>
+        <input id="email" type="email" inputmode="email" placeholder="client@gmail.com" required>
+
+        <div class="row">
+          <div>
+            <label for="plan">Offre</label>
+            <select id="plan">
+              <option value="lifetime">Licence à vie</option>
+              <option value="year">Abonnement 1 an</option>
+              <option value="custom">Durée personnalisée</option>
+            </select>
+          </div>
+          <div id="daysWrap" hidden>
+            <label for="days">Nombre de jours</label>
+            <input id="days" type="number" min="1" step="1" placeholder="ex. 30">
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label for="amount">Montant payé (FCFA)</label>
+            <input id="amount" type="number" min="0" step="500" value="35000">
+          </div>
+          <div>
+            <label for="operator">Paiement reçu par</label>
+            <select id="operator">
+              <option>Mix by YAS</option>
+              <option>Moov Money</option>
+              <option>Autre</option>
+            </select>
+          </div>
+        </div>
+
+        <label for="ref">Référence de la transaction (facultatif)</label>
+        <input id="ref" type="text" placeholder="ex. numéro de transaction">
+
+        <div class="actions">
+          <button id="submitBtn" type="submit">Activer la licence</button>
+        </div>
+      </form>
+      <p id="msg"></p>
+    </section>
+
+    <section class="card">
+      <h2>Clients <span id="count" class="muted"></span></h2>
+      <input id="search" type="search" placeholder="Rechercher une adresse…">
+      <div id="list"></div>
+    </section>
+  </div>
+</main>
+
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js';
+  import { getAuth, onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider }
+    from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js';
+  import { getFirestore, collection, doc, getDoc, getDocs, setDoc, serverTimestamp, Timestamp, deleteField }
+    from 'https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js';
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCa9KvRnsv1rf0m7GMD-0Wlvi8mxnvh0Ds",
+    authDomain: "stockfacture-pro.firebaseapp.com",
+    projectId: "stockfacture-pro",
+    storageBucket: "stockfacture-pro.appspot.com",
+    messagingSenderId: "809570746761",
+    appId: "1:809570746761:web:86aa6fa7dc8b415865a158"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  const $ = (id) => document.getElementById(id);
+  let licenses = [];
+
+  // <pure>
+  const DAY = 86400000;
+  function normalizeEmail(v) { return String(v || '').trim().toLowerCase(); }
+  function isValidEmail(v) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v); }
+  function toMs(v) { return v && typeof v.toMillis === 'function' ? v.toMillis() : NaN; }
+  function fmtDate(ms) { return new Date(ms).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }); }
+  function fmtMoney(n) { return Number(n).toLocaleString('fr-FR').replace(/[\u202f\u00a0]/g, ' ') + ' FCFA'; }
+
+  // Licence à vie : pas de date. Sinon on repart de la date d'expiration actuelle si elle n'est pas dépassée.
+  function computeExpiry(plan, customDays, existingExpiresMs, nowMs) {
+    if (plan === 'lifetime') return null;
+    const days = plan === 'year' ? 365 : customDays;
+    const base = !isNaN(existingExpiresMs) && existingExpiresMs > nowMs ? existingExpiresMs : nowMs;
+    return base + days * DAY;
+  }
+
+  function statusOf(l, nowMs) {
+    if (l.isAdmin === true) return { text: 'Administrateur', cls: 'ok' };
+    if (l.isActive !== true) return { text: 'Désactivée', cls: 'bad' };
+    const exp = toMs(l.expiresAt);
+    if (!isNaN(exp)) {
+      if (exp <= nowMs) return { text: 'Expirée le ' + fmtDate(exp), cls: 'bad' };
+      const left = Math.ceil((exp - nowMs) / DAY);
+      return { text: 'Expire le ' + fmtDate(exp) + ' (' + left + ' j)', cls: left <= 30 ? 'warn' : 'ok' };
+    }
+    return { text: 'À vie', cls: 'ok' };
+  }
+  // </pure>
+
+  function setMsg(text, kind) {
+    const m = $('msg');
+    m.textContent = text || '';
+    m.className = kind || '';
+  }
+
+  function show(isAdmin) {
+    $('panel').hidden = !isAdmin;
+  }
+
+  async function loadList() {
+    const snap = await getDocs(collection(db, 'licensed_users'));
+    licenses = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    licenses.sort((a, b) => {
+      const ta = toMs(a.paidAt) || toMs(a.activatedAt) || 0;
+      const tb = toMs(b.paidAt) || toMs(b.activatedAt) || 0;
+      return tb - ta || a.id.localeCompare(b.id);
+    });
+    render();
+  }
+
+  function button(label, cls, onClick) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'small ' + (cls || 'ghost');
+    b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function render() {
+    const q = normalizeEmail($('search').value);
+    const rows = licenses.filter((l) => !q || l.id.includes(q));
+    $('count').textContent = '(' + rows.length + '/' + licenses.length + ')';
+    const list = $('list');
+    list.replaceChildren();
+    const now = Date.now();
+
+    for (const l of rows) {
+      const st = statusOf(l, now);
+      const item = document.createElement('div');
+      item.className = 'item';
+
+      const email = document.createElement('div');
+      email.className = 'email';
+      email.textContent = l.id;
+
+      const badge = document.createElement('span');
+      badge.className = 'badge ' + st.cls;
+      badge.textContent = st.text;
+
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      const parts = [];
+      if (l.amountPaid !== undefined) parts.push(fmtMoney(l.amountPaid));
+      if (l.operator) parts.push(l.operator);
+      if (l.paymentRef) parts.push('réf. ' + l.paymentRef);
+      const paid = toMs(l.paidAt);
+      if (!isNaN(paid)) parts.push('payé le ' + fmtDate(paid));
+      meta.textContent = parts.join(' · ');
+
+      const actions = document.createElement('div');
+      actions.className = 'actions';
+      actions.style.marginTop = '2px';
+      if (l.isAdmin !== true) {
+        actions.append(button('Renouveler', 'ghost', () => fillForm(l.id)));
+        if (l.isActive === true) actions.append(button('Révoquer', 'danger', () => setActive(l.id, false)));
+        else actions.append(button('Réactiver', 'ghost', () => setActive(l.id, true)));
+      }
+
+      item.append(email, badge);
+      if (parts.length) item.append(meta);
+      if (actions.children.length) item.append(actions);
+      list.append(item);
+    }
+  }
+
+  function fillForm(email) {
+    $('email').value = email;
+    $('email').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setMsg('Renseignez l’offre et le montant, puis validez.', 'warn');
+  }
+
+  async function setActive(email, active) {
+    const verb = active ? 'Réactiver' : 'Révoquer';
+    if (!confirm(verb + ' la licence de ' + email + ' ?')) return;
+    try {
+      const data = active
+        ? { isActive: true, revokedAt: deleteField() }
+        : { isActive: false, revokedAt: serverTimestamp() };
+      await setDoc(doc(db, 'licensed_users', email), data, { merge: true });
+      setMsg('✔ Licence mise à jour : ' + email, 'ok');
+      await loadList();
+    } catch (e) {
+      setMsg(explain(e), 'bad');
+    }
+  }
+
+  function explain(e) {
+    if (e && e.code === 'permission-denied') {
+      return 'Refusé par Firestore : ce compte n’est pas administrateur, ou les règles ne sont pas à jour.';
+    }
+    return 'Erreur : ' + (e && e.message ? e.message : e);
+  }
+
+  $('plan').addEventListener('change', () => {
+    const plan = $('plan').value;
+    $('daysWrap').hidden = plan !== 'custom';
+    if (plan === 'lifetime') $('amount').value = 35000;
+  });
+  $('search').addEventListener('input', render);
+
+  $('form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setMsg('');
+    const email = normalizeEmail($('email').value);
+    if (!isValidEmail(email)) return setMsg('Adresse e-mail invalide.', 'bad');
+
+    const plan = $('plan').value;
+    const customDays = parseInt($('days').value, 10);
+    if (plan === 'custom' && !(customDays > 0)) return setMsg('Indiquez un nombre de jours.', 'bad');
+    const amount = Number($('amount').value) || 0;
+
+    const btn = $('submitBtn');
+    btn.disabled = true;
+    try {
+      const ref = doc(db, 'licensed_users', email);
+      const snap = await getDoc(ref);
+      const existing = snap.exists() ? snap.data() : null;
+
+      if (existing && existing.isAdmin === true) throw new Error('Ce compte est administrateur : modification impossible ici.');
+      if (existing && existing.isActive === true && !existing.expiresAt && plan !== 'lifetime') {
+        throw new Error('Ce client a déjà une licence à vie.');
+      }
+
+      const expiresMs = computeExpiry(plan, customDays, existing ? toMs(existing.expiresAt) : NaN, Date.now());
+      const offer = plan === 'lifetime' ? 'licence à vie' : 'expire le ' + fmtDate(expiresMs);
+      if (!confirm('Activer ' + email + ' : ' + offer + ', ' + fmtMoney(amount) + ' ?')) {
+        btn.disabled = false;
+        return;
+      }
+
+      const data = {
+        isActive: true,
+        isAdmin: false,
+        plan: plan,
+        amountPaid: amount,
+        operator: $('operator').value,
+        paymentRef: $('ref').value.trim(),
+        paidAt: serverTimestamp(),
+        revokedAt: deleteField(),
+        expiresAt: expiresMs === null ? deleteField() : Timestamp.fromMillis(expiresMs),
+      };
+      if (!existing) data.activatedAt = serverTimestamp();
+
+      await setDoc(ref, data, { merge: true });
+      setMsg('✔ Licence activée : ' + email + ' (' + offer + ')', 'ok');
+      $('form').reset();
+      $('daysWrap').hidden = true;
+      $('amount').value = 35000;
+      await loadList();
+    } catch (err) {
+      setMsg(explain(err), 'bad');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // Installation « en un clic » : l'icône ouvre directement le panneau (la session Google reste active)
+  let deferredInstall = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstall = e;
+    $('installBtn').hidden = false;
+  });
+  $('installBtn').addEventListener('click', async () => {
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    try { await deferredInstall.userChoice; } catch (e) { /* ignore */ }
+    deferredInstall = null;
+    $('installBtn').hidden = true;
+  });
+  window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; });
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (isIos && !isStandalone) $('iosHint').hidden = false;
+
+  $('signInBtn').addEventListener('click', async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(auth, provider);
+    } catch (err) {
+      $('authText').textContent = 'Connexion impossible : ' + (err && err.message ? err.message : err);
+    }
+  });
+  $('signOutBtn').addEventListener('click', () => signOut(auth));
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      show(false);
+      $('signInBtn').hidden = false;
+      $('signOutBtn').hidden = true;
+      $('authText').textContent = 'Connectez-vous avec votre compte administrateur.';
+      return;
+    }
+    $('signInBtn').hidden = true;
+    $('signOutBtn').hidden = false;
+    $('authText').textContent = 'Connecté : ' + user.email;
+    try {
+      const snap = await getDoc(doc(db, 'licensed_users', normalizeEmail(user.email)));
+      const d = snap.exists() ? snap.data() : null;
+      if (d && d.isAdmin === true && d.isActive === true) {
+        show(true);
+        await loadList();
+      } else {
+        show(false);
+        $('authText').textContent = 'Connecté : ' + user.email + ' — ce compte n’a pas les droits d’administration.';
+      }
+    } catch (err) {
+      show(false);
+      $('authText').textContent = explain(err);
+    }
+  });
+</script>
+</body>
+</html>
